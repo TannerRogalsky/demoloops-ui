@@ -1,5 +1,4 @@
 #![feature(const_type_id)]
-#![allow(unused)]
 
 use serde::{Deserialize, Serialize};
 use slotmap::SlotMap;
@@ -79,7 +78,7 @@ impl NodeInput for Time {
         &[]
     }
 
-    fn set_input(&mut self, index: usize, v: &dyn Any) -> Result<(), SetInputError> {
+    fn set_input(&mut self, _index: usize, _v: &dyn Any) -> Result<(), SetInputError> {
         Err(SetInputError::InvalidIndex)
     }
 }
@@ -389,9 +388,7 @@ impl Graph {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::iter::{Map, Once};
-    use std::ops::{Mul, Range, Rem};
+    use super::{Any, Connection, NodeID, SlotMap};
 
     #[test]
     fn many_one() {
@@ -491,7 +488,7 @@ mod tests {
             A: 'static,
             B: 'static,
         {
-            fn inputs_match(inputs: &[Box<dyn Any>]) -> bool {
+            fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> bool {
                 if inputs.len() == 2 {
                     inputs[0].is::<A>() && inputs[1].is::<B>()
                 } else {
@@ -504,10 +501,10 @@ mod tests {
         where
             T: 'static,
         {
-            fn inputs_match(inputs: &[Box<dyn Any>]) -> bool {
-                <Pair<One<T>, One<T>> as NodeInputProto>::inputs_match(inputs)
-                    || <Pair<One<T>, Many<T>> as NodeInputProto>::inputs_match(inputs)
-                    || <Pair<Many<T>, Many<T>> as NodeInputProto>::inputs_match(inputs)
+            fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> bool {
+                self.one_one.inputs_match(inputs)
+                    || self.one_many.inputs_match(inputs)
+                    || self.many_many.inputs_match(inputs)
             }
         }
 
@@ -515,16 +512,16 @@ mod tests {
         where
             T: std::ops::Mul<Output = T> + 'static + Copy,
         {
-            fn op(self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
-                if <Pair<One<T>, One<T>> as NodeInputProto>::inputs_match(inputs) {
+            fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
+                if self.one_one.inputs_match(inputs) {
                     let rhs = inputs.remove(1).downcast::<One<T>>().unwrap();
                     let lhs = inputs.remove(0).downcast::<One<T>>().unwrap();
                     Ok(Box::new(*lhs * *rhs))
-                } else if <Pair<One<T>, Many<T>> as NodeInputProto>::inputs_match(inputs) {
+                } else if self.one_many.inputs_match(inputs) {
                     let rhs = inputs.remove(1).downcast::<Many<T>>().unwrap();
                     let lhs = inputs.remove(0).downcast::<One<T>>().unwrap();
                     Ok(Box::new(*lhs * *rhs))
-                } else if <Pair<Many<T>, Many<T>> as NodeInputProto>::inputs_match(inputs) {
+                } else if self.many_many.inputs_match(inputs) {
                     let rhs = inputs.remove(1).downcast::<Many<T>>().unwrap();
                     let lhs = inputs.remove(0).downcast::<Many<T>>().unwrap();
                     Ok(Box::new(*lhs * *rhs))
@@ -535,14 +532,13 @@ mod tests {
         }
 
         impl NodeInputProto for MultiplyNode {
-            fn inputs_match(inputs: &[Box<dyn Any>]) -> bool {
-                <MultiplyGroup<f32> as NodeInputProto>::inputs_match(inputs)
-                    || <MultiplyGroup<u32> as NodeInputProto>::inputs_match(inputs)
+            fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> bool {
+                self.f32.inputs_match(inputs) || self.u32.inputs_match(inputs)
             }
         }
 
         impl NodeOutputProto for MultiplyNode {
-            fn op(self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
+            fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
                 MultiplyGroup::<f32>::default()
                     .op(inputs)
                     .or_else(|_e| MultiplyGroup::<u32>::default().op(inputs))
@@ -568,9 +564,8 @@ mod tests {
         where
             T: 'static,
         {
-            fn inputs_match(inputs: &[Box<dyn Any>]) -> bool {
-                <Pair<One<T>, One<T>> as NodeInputProto>::inputs_match(inputs)
-                    || <Pair<One<T>, Many<T>> as NodeInputProto>::inputs_match(inputs)
+            fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> bool {
+                self.one_one.inputs_match(inputs) || self.one_many.inputs_match(inputs)
             }
         }
 
@@ -578,19 +573,19 @@ mod tests {
         where
             T: std::ops::Rem<Output = T> + Into<f64> + Copy + 'static,
         {
-            fn op(self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
+            fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
                 fn ratio<T>(length: T, count: T) -> f32
                 where
                     T: std::ops::Rem<Output = T> + Into<f64> + Copy,
                 {
-                    (Into::<f64>::into(count.rem(length)) / length.into()) as f32
+                    (count.rem(length).into() / length.into()) as f32
                 }
 
-                if <Pair<One<T>, One<T>> as NodeInputProto>::inputs_match(inputs) {
+                if self.one_one.inputs_match(inputs) {
                     let count = inputs.remove(1).downcast::<One<T>>().unwrap();
                     let length = inputs.remove(0).downcast::<One<T>>().unwrap();
                     Ok(Box::new(One(ratio(length.0, count.0))))
-                } else if <Pair<One<T>, Many<T>> as NodeInputProto>::inputs_match(inputs) {
+                } else if self.one_many.inputs_match(inputs) {
                     let count = inputs.remove(1).downcast::<Many<T>>().unwrap();
                     let length = inputs.remove(0).downcast::<One<T>>().unwrap();
                     let out = count.0.map(move |count| ratio(length.0, count));
@@ -602,13 +597,13 @@ mod tests {
         }
 
         impl NodeInputProto for RatioNode {
-            fn inputs_match(inputs: &[Box<dyn Any>]) -> bool {
-                RatioGroup::<f32>::inputs_match(inputs) || RatioGroup::<u32>::inputs_match(inputs)
+            fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> bool {
+                self.f32.inputs_match(inputs) || self.u32.inputs_match(inputs)
             }
         }
 
         impl NodeOutputProto for RatioNode {
-            fn op(self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
+            fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
                 RatioGroup::<f32>::default()
                     .op(inputs)
                     .or_else(|_e| RatioGroup::<u32>::default().op(inputs))
@@ -621,7 +616,7 @@ mod tests {
         }
 
         impl NodeInputProto for RangeNode {
-            fn inputs_match(inputs: &[Box<dyn Any>]) -> bool {
+            fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> bool {
                 if inputs.len() == 1 {
                     inputs[0].is::<One<u32>>()
                 } else {
@@ -631,8 +626,8 @@ mod tests {
         }
 
         impl NodeOutputProto for RangeNode {
-            fn op(self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
-                if Self::inputs_match(&inputs) {
+            fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
+                if self.inputs_match(&inputs) {
                     let length = inputs.remove(0);
                     let length = length.downcast::<One<u32>>().unwrap();
                     Ok(Box::new(Into::<Many<u32>>::into(0u32..(length.0))))
@@ -649,36 +644,36 @@ mod tests {
         }
 
         impl NodeInputProto for ConstantNode {
-            fn inputs_match(inputs: &[Box<dyn Any>]) -> bool {
+            fn inputs_match(&self, _inputs: &[Box<dyn Any>]) -> bool {
                 false
             }
 
-            fn is_terminator() -> bool {
+            fn is_terminator(&self) -> bool {
                 true
             }
         }
 
         impl NodeOutputProto for ConstantNode {
-            fn op(self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
+            fn op(&self, _inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
                 Ok(match self {
-                    ConstantNode::Unsigned(output) => Box::new(One(output)),
-                    ConstantNode::Float(output) => Box::new(One(output)),
+                    ConstantNode::Unsigned(output) => Box::new(One(*output)),
+                    ConstantNode::Float(output) => Box::new(One(*output)),
                 })
             }
         }
 
         trait NodeInputProto {
-            fn inputs_match(inputs: &[Box<dyn Any>]) -> bool;
-            fn is_terminator() -> bool {
+            fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> bool;
+            fn is_terminator(&self) -> bool {
                 false
             }
         }
 
         trait NodeOutputProto {
-            fn op(self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()>;
+            fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()>;
         }
 
-        trait NodeProto {}
+        trait NodeProto: NodeInputProto + NodeOutputProto {}
         impl<T> NodeProto for T where T: NodeInputProto + NodeOutputProto {}
 
         {
@@ -699,9 +694,9 @@ mod tests {
             let mut buffer: Vec<Box<dyn Any>> = Vec::new();
             buffer.push(Box::new(One(2u32)));
             buffer.push(Box::new(Into::<Many<u32>>::into(vec![2u32, 3, 4])));
-            assert!(<Pair<One<u32>, Many<u32>>>::inputs_match(&buffer));
-            assert!(MultiplyGroup::<u32>::inputs_match(&buffer));
-            assert!(MultiplyNode::inputs_match(&buffer));
+            assert!(<Pair<One<u32>, Many<u32>>>::default().inputs_match(&buffer));
+            assert!(MultiplyGroup::<u32>::default().inputs_match(&buffer));
+            assert!(MultiplyNode::default().inputs_match(&buffer));
 
             let output = MultiplyNode::default().op(&mut buffer).unwrap();
             assert!(buffer.is_empty());
@@ -717,7 +712,7 @@ mod tests {
             let mut buffer: Vec<Box<dyn Any>> = Vec::new();
             buffer.push(Box::new(One(3u32)));
             buffer.push(Box::new(Into::<Many<u32>>::into(0u32..3)));
-            assert!(RatioNode::inputs_match(&buffer));
+            assert!(RatioNode::default().inputs_match(&buffer));
 
             let output = RatioNode::default().op(&mut buffer).unwrap();
             assert!(buffer.is_empty());
@@ -729,18 +724,17 @@ mod tests {
         {
             let mut buffer: Vec<Box<dyn Any>> = vec![];
 
-            let mut nodes: Vec<Box<dyn NodeProto>> = vec![];
             let constant = ConstantNode::Unsigned(3);
             let range = RangeNode::default();
             let ratio = RatioNode::default();
             let multiply = MultiplyNode::default();
 
-            let constant_output = constant.clone().op(&mut buffer).unwrap();
+            let constant_output = constant.op(&mut buffer).unwrap();
 
             buffer.push(constant_output);
             let range_output = range.op(&mut buffer).unwrap();
 
-            let constant_output = constant.clone().op(&mut buffer).unwrap();
+            let constant_output = constant.op(&mut buffer).unwrap();
 
             buffer.push(constant_output);
             buffer.push(range_output);
@@ -758,5 +752,71 @@ mod tests {
                 output.collect::<Vec<_>>()
             );
         }
+
+        struct Graph {
+            root: NodeID,
+            nodes: SlotMap<NodeID, Box<dyn NodeProto>>,
+            connections: Vec<Connection>,
+        }
+
+        impl Graph {
+            fn with_root<N>(root: N) -> Self
+            where
+                N: NodeProto + 'static,
+            {
+                let mut nodes: SlotMap<NodeID, Box<dyn NodeProto>> = SlotMap::with_key();
+                let root = nodes.insert(Box::new(root));
+                Self {
+                    root,
+                    nodes,
+                    connections: vec![],
+                }
+            }
+
+            fn add_node<N>(&mut self, node: N) -> NodeID
+            where
+                N: NodeProto + 'static,
+            {
+                self.nodes.insert(Box::new(node))
+            }
+
+            fn connect(&mut self, from: NodeID, to: NodeID, input: usize) {
+                self.connections.push(Connection { from, to, input })
+            }
+
+            fn execute(&self) -> Result<Box<dyn Any>, ()> {
+                self.execute_node(self.root)
+            }
+
+            fn execute_node(&self, node_id: NodeID) -> Result<Box<dyn Any>, ()> {
+                let to = self.nodes.get(node_id).unwrap();
+                let mut connections = self
+                    .connections
+                    .iter()
+                    .filter(|connection| connection.connects(node_id))
+                    .collect::<Vec<_>>();
+                connections.sort_unstable_by(|a, b| a.input.cmp(&b.input));
+                let mut input = connections
+                    .into_iter()
+                    .map(|connection| {
+                        let input = self.nodes.get(connection.from).unwrap();
+                        if input.is_terminator() {
+                            let mut buf = vec![];
+                            input.op(&mut buf)
+                        } else {
+                            self.execute_node(connection.from)
+                        }
+                    })
+                    .collect::<Result<Vec<Box<dyn Any>>, ()>>()
+                    .unwrap();
+                to.op(&mut input)
+            }
+        }
+
+        let mut graph = Graph::with_root(RangeNode::default());
+        let constant = graph.add_node(ConstantNode::Unsigned(3));
+        graph.connect(constant, graph.root, 0);
+        let output = graph.execute().unwrap().downcast::<Many<u32>>().unwrap();
+        assert_eq!(vec![0, 1, 2], output.collect::<Vec<_>>());
     }
 }
