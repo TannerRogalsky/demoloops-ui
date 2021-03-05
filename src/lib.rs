@@ -1,21 +1,29 @@
 mod nodes;
 
-use nodes::*;
+pub use nodes::*;
 use serde::{Deserialize, Serialize};
 use slotmap::SlotMap;
 use std::any::Any;
 
 #[derive(Debug, Copy, Clone, Default, Ord, PartialOrd, Eq, PartialEq)]
-struct One<T>(T);
+pub struct One<T>(T);
 
-trait ManyTrait<T>: Iterator<Item = T> + dyn_clone::DynClone + std::fmt::Debug {}
+impl<T> std::ops::Deref for One<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+pub trait ManyTrait<T>: Iterator<Item = T> + dyn_clone::DynClone + std::fmt::Debug {}
 dyn_clone::clone_trait_object!(<T> ManyTrait<T>);
 impl<I, T> ManyTrait<T> for I where I: Iterator<Item = T> + Clone + std::fmt::Debug {}
 
 // If it turns out that there are only so many different types of iterator then this could
 // be replaced internally with an enum and the From implementation restricted
 #[derive(Debug, Clone)]
-struct Many<T>(Box<dyn ManyTrait<T>>);
+pub struct Many<T>(Box<dyn ManyTrait<T>>);
 impl<T> Default for Many<T>
 where
     T: 'static,
@@ -80,19 +88,19 @@ struct Pair<A, B> {
     rhs: std::marker::PhantomData<B>,
 }
 
-trait NodeInput {
+pub trait NodeInput {
     fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> bool;
     fn is_terminator(&self) -> bool {
         false
     }
 }
 
-trait NodeOutput {
+pub trait NodeOutput {
     fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()>;
 }
 
 #[typetag::serde(tag = "type")]
-trait Node: std::fmt::Debug + dyn_clone::DynClone + NodeInput + NodeOutput {}
+pub trait Node: std::fmt::Debug + dyn_clone::DynClone + NodeInput + NodeOutput {}
 dyn_clone::clone_trait_object!(Node);
 
 slotmap::new_key_type! {
@@ -121,7 +129,7 @@ pub struct Graph {
 }
 
 impl Graph {
-    fn with_root<N>(root: N) -> Self
+    pub fn with_root<N>(root: N) -> Self
     where
         N: Node + 'static,
     {
@@ -134,18 +142,22 @@ impl Graph {
         }
     }
 
-    fn add_node<N>(&mut self, node: N) -> NodeID
+    pub fn root(&self) -> NodeID {
+        self.root
+    }
+
+    pub fn add_node<N>(&mut self, node: N) -> NodeID
     where
         N: Node + 'static,
     {
         self.nodes.insert(Box::new(node))
     }
 
-    fn connect(&mut self, from: NodeID, to: NodeID, input: usize) {
+    pub fn connect(&mut self, from: NodeID, to: NodeID, input: usize) {
         self.connections.push(Connection { from, to, input })
     }
 
-    fn execute(&self) -> Result<Box<dyn Any>, ()> {
+    pub fn execute(&self) -> Result<Box<dyn Any>, ()> {
         self.execute_node(self.root)
     }
 
