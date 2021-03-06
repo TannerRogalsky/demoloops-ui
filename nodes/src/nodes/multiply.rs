@@ -80,4 +80,8 @@ impl NodeOutput for MultiplyNode {
 }
 
 #[typetag::serde]
-impl Node for MultiplyNode {}
+impl Node for MultiplyNode {
+    fn name(&self) -> &'static str {
+        "multiply"
+    }
+}

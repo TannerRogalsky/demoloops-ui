@@ -1,4 +1,4 @@
-use crate::{Many, Node, NodeInput, NodeOutput, One};
+use nodes::{Many, Node, NodeInput, NodeOutput, One};
 use solstice_2d::{Color, Draw, Rectangle};
 use std::any::Any;
 
@@ -22,16 +22,16 @@ impl NodeOutput for DrawNode {
                 let rectangle = inputs.pop().unwrap().downcast::<One<Rectangle>>().unwrap();
                 let mut dl = solstice_2d::DrawList::default();
                 dl.clear(Color::new(0., 0., 0., 1.));
-                dl.draw_with_color(rectangle.0, Color::new(1., 1., 1., 1.));
-                Ok(Box::new(One(dl)))
+                dl.draw_with_color(rectangle.inner(), Color::new(1., 1., 1., 1.));
+                Ok(Box::new(One::new(dl)))
             } else {
                 let rectangles = inputs.pop().unwrap().downcast::<Many<Rectangle>>().unwrap();
                 let mut dl = solstice_2d::DrawList::default();
                 dl.clear(Color::new(0., 0., 0., 1.));
-                for rectangle in rectangles.0 {
+                for rectangle in rectangles.inner() {
                     dl.draw_with_color(rectangle, Color::new(1., 1., 1., 1.));
                 }
-                Ok(Box::new(One(dl)))
+                Ok(Box::new(One::new(dl)))
             }
         } else {
             Err(())
@@ -40,4 +40,8 @@ impl NodeOutput for DrawNode {
 }
 
 #[typetag::serde]
-impl Node for DrawNode {}
+impl Node for DrawNode {
+    fn name(&self) -> &'static str {
+        "draw"
+    }
+}

@@ -29,7 +29,11 @@ impl NodeOutput for RangeNode {
 }
 
 #[typetag::serde]
-impl Node for RangeNode {}
+impl Node for RangeNode {
+    fn name(&self) -> &'static str {
+        "range"
+    }
+}
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct Range2DNode {
@@ -62,4 +66,8 @@ impl NodeOutput for Range2DNode {
 }
 
 #[typetag::serde]
-impl Node for Range2DNode {}
+impl Node for Range2DNode {
+    fn name(&self) -> &'static str {
+        "2d range"
+    }
+}

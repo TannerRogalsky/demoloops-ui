@@ -67,4 +67,8 @@ impl NodeOutput for RatioNode {
 }
 
 #[typetag::serde]
-impl Node for RatioNode {}
+impl Node for RatioNode {
+    fn name(&self) -> &'static str {
+        "ratio"
+    }
+}

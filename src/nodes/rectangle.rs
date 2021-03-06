@@ -1,4 +1,4 @@
-use crate::{Many, Node, NodeInput, NodeOutput, One};
+use nodes::{Many, Node, NodeInput, NodeOutput, One};
 use solstice_2d::Rectangle;
 use std::any::Any;
 
@@ -20,16 +20,56 @@ impl NodeOutput for RectangleNode {
     fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
         if self.inputs_match(&inputs) {
             if inputs.iter().all(|input| input.is::<One<f32>>()) {
-                let height = inputs.pop().unwrap().downcast::<One<f32>>().unwrap().0;
-                let width = inputs.pop().unwrap().downcast::<One<f32>>().unwrap().0;
-                let y = inputs.pop().unwrap().downcast::<One<f32>>().unwrap().0;
-                let x = inputs.pop().unwrap().downcast::<One<f32>>().unwrap().0;
-                Ok(Box::new(One(Rectangle::new(x, y, width, height))))
+                let height = inputs
+                    .pop()
+                    .unwrap()
+                    .downcast::<One<f32>>()
+                    .unwrap()
+                    .inner();
+                let width = inputs
+                    .pop()
+                    .unwrap()
+                    .downcast::<One<f32>>()
+                    .unwrap()
+                    .inner();
+                let y = inputs
+                    .pop()
+                    .unwrap()
+                    .downcast::<One<f32>>()
+                    .unwrap()
+                    .inner();
+                let x = inputs
+                    .pop()
+                    .unwrap()
+                    .downcast::<One<f32>>()
+                    .unwrap()
+                    .inner();
+                Ok(Box::new(One::new(Rectangle::new(x, y, width, height))))
             } else if inputs.iter().all(|input| input.is::<Many<f32>>()) {
-                let height = inputs.pop().unwrap().downcast::<Many<f32>>().unwrap().0;
-                let width = inputs.pop().unwrap().downcast::<Many<f32>>().unwrap().0;
-                let y = inputs.pop().unwrap().downcast::<Many<f32>>().unwrap().0;
-                let x = inputs.pop().unwrap().downcast::<Many<f32>>().unwrap().0;
+                let height = inputs
+                    .pop()
+                    .unwrap()
+                    .downcast::<Many<f32>>()
+                    .unwrap()
+                    .inner();
+                let width = inputs
+                    .pop()
+                    .unwrap()
+                    .downcast::<Many<f32>>()
+                    .unwrap()
+                    .inner();
+                let y = inputs
+                    .pop()
+                    .unwrap()
+                    .downcast::<Many<f32>>()
+                    .unwrap()
+                    .inner();
+                let x = inputs
+                    .pop()
+                    .unwrap()
+                    .downcast::<Many<f32>>()
+                    .unwrap()
+                    .inner();
 
                 let out = x
                     .zip(y)
@@ -47,7 +87,11 @@ impl NodeOutput for RectangleNode {
 }
 
 #[typetag::serde]
-impl Node for RectangleNode {}
+impl Node for RectangleNode {
+    fn name(&self) -> &'static str {
+        "rectangle"
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -56,10 +100,10 @@ mod tests {
     #[test]
     fn one() {
         let mut inputs: Vec<Box<dyn Any>> = vec![
-            Box::new(One(100f32)),
-            Box::new(One(100f32)),
-            Box::new(One(100f32)),
-            Box::new(One(100f32)),
+            Box::new(One::new(100f32)),
+            Box::new(One::new(100f32)),
+            Box::new(One::new(100f32)),
+            Box::new(One::new(100f32)),
         ];
         let output = RectangleNode::default().op(&mut inputs);
         let rect = output.unwrap().downcast::<One<Rectangle>>();
