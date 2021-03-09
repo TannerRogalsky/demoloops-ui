@@ -45,6 +45,7 @@ fn main() {
     graph.connect(rect, graph.root(), 0);
 
     let mut show_graph = true;
+    let mut times = std::collections::VecDeque::with_capacity(60);
 
     event_loop.run(move |event, _target, control_flow| {
         use glutin::{event::*, event_loop::*};
@@ -77,7 +78,14 @@ fn main() {
             Event::RedrawRequested(_) => {
                 ctx.clear();
                 {
-                    match graph.inner().execute() {
+                    let start = std::time::Instant::now();
+                    let result = graph.inner().execute();
+                    let elapsed = start.elapsed();
+                    while times.len() > 60 {
+                        times.pop_front();
+                    }
+                    times.push_back(elapsed);
+                    match result {
                         Ok(output) => {
                             let dl = output.downcast::<One<DrawList>>().unwrap();
                             ctx2d.process(&mut ctx, &dl.inner());
@@ -91,7 +99,16 @@ fn main() {
                 }
 
                 if show_graph {
-                    graph.render(ctx2d.lock(&mut ctx))
+                    let mut g = ctx2d.lock(&mut ctx);
+                    let average_elapsed =
+                        times.iter().sum::<std::time::Duration>() / times.len() as u32;
+                    g.print(
+                        format!("Eval time: {:?}", average_elapsed),
+                        font,
+                        16.,
+                        solstice_2d::Rectangle::new(width / 2., 0., width / 2., 50.),
+                    );
+                    graph.render(g);
                 }
 
                 window.swap_buffers().expect("terrible, terrible damage");
