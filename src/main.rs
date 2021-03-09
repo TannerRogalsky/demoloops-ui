@@ -21,16 +21,28 @@ fn main() {
     .unwrap();
     let font = ctx2d.add_font(font);
 
-    let mut graph = Graph::with_root(DrawNode::default());
-    let d = graph.add_node(ConstantNode::Float(100.));
-    let rect = graph.add_node(RectangleNode::default());
-    graph.connect(d, rect, 0);
+    let mut graph = UIGraph::new(font, DrawNode, 500., 500.);
+    let count = graph.add_node(ConstantNode::Unsigned(6), 100., 100.);
+    let range = graph.add_node(RangeNode, 100., 210.);
+    let d = graph.add_node(ConstantNode::Float(100.), 100., 500.);
+    let offset = graph.add_node(ConstantNode::Float(900.), 500., 100.);
+    let ratio = graph.add_node(RatioNode, 300., 320.);
+    let multiply = graph.add_node(MultiplyNode, 500., 210.);
+    let rect = graph.add_node(RectangleNode, 300., 500.);
+
+    graph.connect(count, range, 0);
+
+    graph.connect(count, ratio, 0);
+    graph.connect(range, ratio, 1);
+
+    graph.connect(offset, multiply, 0);
+    graph.connect(ratio, multiply, 1);
+
+    graph.connect(multiply, rect, 0);
     graph.connect(d, rect, 1);
     graph.connect(d, rect, 2);
     graph.connect(d, rect, 3);
     graph.connect(rect, graph.root(), 0);
-
-    let graph = UIGraph::new(graph, font);
 
     let mut show_graph = true;
 
@@ -63,13 +75,18 @@ fn main() {
                 window.request_redraw();
             }
             Event::RedrawRequested(_) => {
+                ctx.clear();
                 {
                     match graph.inner().execute() {
                         Ok(output) => {
                             let dl = output.downcast::<One<DrawList>>().unwrap();
-                            ctx2d.process(&mut ctx, &*dl);
+                            ctx2d.process(&mut ctx, &dl.inner());
                         }
-                        Err(_) => eprintln!("graph execution failed"),
+                        Err(problem) => {
+                            if let Some(problem) = graph.inner().nodes().get(problem) {
+                                eprintln!("error with {}", problem.name());
+                            }
+                        }
                     }
                 }
 

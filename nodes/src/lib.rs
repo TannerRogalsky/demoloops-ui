@@ -99,10 +99,71 @@ where
     }
 }
 
+pub trait FromAny {
+    fn from_any(inputs: &mut Vec<Box<dyn std::any::Any>>) -> Result<Self, ()>
+    where
+        Self: Sized;
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct Pair<A, B> {
-    lhs: std::marker::PhantomData<A>,
-    rhs: std::marker::PhantomData<B>,
+    lhs: A,
+    rhs: B,
+}
+
+impl<A, B> Pair<A, B>
+where
+    A: 'static,
+    B: 'static,
+{
+    fn can_match(inputs: &[Box<dyn Any>]) -> bool {
+        if inputs.len() == 2 {
+            inputs[0].is::<A>() && inputs[1].is::<B>()
+        } else {
+            false
+        }
+    }
+}
+
+impl<A, B> FromAny for Pair<A, B>
+where
+    A: 'static,
+    B: 'static,
+{
+    fn from_any(inputs: &mut Vec<Box<dyn Any>>) -> Result<Self, ()> {
+        if let Some(rhs) = inputs.pop() {
+            if let Some(lhs) = inputs.pop() {
+                let lhs = lhs.downcast::<A>();
+                let rhs = rhs.downcast::<B>();
+                match (lhs, rhs) {
+                    (Ok(lhs), Ok(rhs)) => Ok(Self {
+                        lhs: *lhs,
+                        rhs: *rhs,
+                    }),
+                    (Ok(lhs), Err(rhs)) => {
+                        inputs.push(lhs);
+                        inputs.push(rhs);
+                        Err(())
+                    }
+                    (Err(lhs), Ok(rhs)) => {
+                        inputs.push(lhs);
+                        inputs.push(rhs);
+                        Err(())
+                    }
+                    (Err(lhs), Err(rhs)) => {
+                        inputs.push(lhs);
+                        inputs.push(rhs);
+                        Err(())
+                    }
+                }
+            } else {
+                inputs.push(rhs);
+                Err(())
+            }
+        } else {
+            Err(())
+        }
+    }
 }
 
 pub trait NodeInput {
@@ -182,11 +243,11 @@ impl Graph {
         self.connections.push(Connection { from, to, input })
     }
 
-    pub fn execute(&self) -> Result<Box<dyn Any>, ()> {
+    pub fn execute(&self) -> Result<Box<dyn Any>, NodeID> {
         self.execute_node(self.root)
     }
 
-    fn execute_node(&self, node_id: NodeID) -> Result<Box<dyn Any>, ()> {
+    fn execute_node(&self, node_id: NodeID) -> Result<Box<dyn Any>, NodeID> {
         let to = self.nodes.get(node_id).unwrap();
         let mut connections = self
             .connections
@@ -200,14 +261,13 @@ impl Graph {
                 let input = self.nodes.get(connection.from).unwrap();
                 if input.is_terminator() {
                     let mut buf = vec![];
-                    input.op(&mut buf)
+                    input.op(&mut buf).map_err(|_| connection.from)
                 } else {
                     self.execute_node(connection.from)
                 }
             })
-            .collect::<Result<Vec<Box<dyn Any>>, ()>>()
-            .unwrap();
-        to.op(&mut input)
+            .collect::<Result<Vec<Box<dyn Any>>, NodeID>>()?;
+        to.op(&mut input).map_err(|_| node_id)
     }
 }
 
@@ -235,13 +295,13 @@ mod tests {
             let mut buffer: Vec<Box<dyn Any>> = Vec::new();
             buffer.push(Box::new(One(2u32)));
             buffer.push(Box::new(Into::<Many<u32>>::into(vec![2u32, 3, 4])));
-            assert!(MultiplyNode::default().inputs_match(&buffer));
+            assert!(MultiplyNode.inputs_match(&buffer));
 
-            let output = MultiplyNode::default().op(&mut buffer).unwrap();
+            let output = MultiplyNode.op(&mut buffer).unwrap();
             assert!(buffer.is_empty());
             buffer.push(output);
             buffer.push(Box::new(Into::<Many<u32>>::into(vec![3u32, 4, 5])));
-            let output = MultiplyNode::default().op(&mut buffer).unwrap();
+            let output = MultiplyNode.op(&mut buffer).unwrap();
 
             let output = output.downcast::<Many<u32>>().unwrap();
             assert_eq!(vec![12u32, 24, 40], output.collect::<Vec<_>>());
@@ -251,9 +311,9 @@ mod tests {
             let mut buffer: Vec<Box<dyn Any>> = Vec::new();
             buffer.push(Box::new(One(3u32)));
             buffer.push(Box::new(Into::<Many<u32>>::into(0u32..3)));
-            assert!(RatioNode::default().inputs_match(&buffer));
+            assert!(RatioNode.inputs_match(&buffer));
 
-            let output = RatioNode::default().op(&mut buffer).unwrap();
+            let output = RatioNode.op(&mut buffer).unwrap();
             assert!(buffer.is_empty());
 
             let output = output.downcast::<Many<f32>>().unwrap();
@@ -264,9 +324,9 @@ mod tests {
             let mut buffer: Vec<Box<dyn Any>> = vec![];
 
             let constant = ConstantNode::Unsigned(3);
-            let range = RangeNode::default();
-            let ratio = RatioNode::default();
-            let multiply = MultiplyNode::default();
+            let range = RangeNode;
+            let ratio = RatioNode;
+            let multiply = MultiplyNode;
 
             let constant_output = constant.op(&mut buffer).unwrap();
 
@@ -293,7 +353,7 @@ mod tests {
         }
 
         {
-            let mut graph = Graph::with_root(RangeNode::default());
+            let mut graph = Graph::with_root(RangeNode);
             let constant = graph.add_node(ConstantNode::Unsigned(3));
             graph.connect(constant, graph.root, 0);
             let output = graph.execute().unwrap().downcast::<Many<u32>>().unwrap();
@@ -304,11 +364,11 @@ mod tests {
             const WIDTH: u32 = 3;
             const HEIGHT: u32 = 5;
 
-            let mut graph = Graph::with_root(RatioNode::default());
+            let mut graph = Graph::with_root(RatioNode);
             let width = graph.add_node(ConstantNode::Unsigned(WIDTH));
             let height = graph.add_node(ConstantNode::Unsigned(HEIGHT));
-            let index = graph.add_node(Range2DNode::default());
-            let total = graph.add_node(MultiplyNode::default());
+            let index = graph.add_node(Range2DNode);
+            let total = graph.add_node(MultiplyNode);
 
             graph.connect(width, index, 0);
             graph.connect(height, index, 1);
