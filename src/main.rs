@@ -71,7 +71,18 @@ fn main() {
         position: PhysicalPosition::new(0., 0.),
         left: ClickState::Up,
     };
-    let mut selected_node: Option<NodeID> = None;
+
+    #[derive(Copy, Clone)]
+    enum Action {
+        Move,
+        Resize,
+    }
+    #[derive(Copy, Clone)]
+    struct MouseActionContext {
+        node: NodeID,
+        action: Action,
+    }
+    let mut mouse_action: Option<MouseActionContext> = None;
 
     let mut show_graph = true;
     let mut times = std::collections::VecDeque::with_capacity(60);
@@ -83,6 +94,10 @@ fn main() {
             Event::WindowEvent { window_id, event } => {
                 if window_id == window.id() {
                     match event {
+                        WindowEvent::Resized(size) => {
+                            ctx.set_viewport(0, 0, size.width as _, size.height as _);
+                            ctx2d.set_width_height(size.width as _, size.height as _);
+                        }
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                         WindowEvent::KeyboardInput {
                             input:
@@ -107,13 +122,23 @@ fn main() {
                                         .metadata()
                                         .iter()
                                         .find(|(_id, metadata)| metadata.contains(x, y));
-                                    if let Some((node, _metadata)) = selected {
-                                        selected_node = Some(node);
+                                    if let Some((node, metadata)) = selected {
+                                        if rect_contains(&metadata.top_bar(), x, y) {
+                                            mouse_action = Some(MouseActionContext {
+                                                node,
+                                                action: Action::Move,
+                                            })
+                                        } else if rect_contains(&metadata.resize(), x, y) {
+                                            mouse_action = Some(MouseActionContext {
+                                                node,
+                                                action: Action::Resize,
+                                            })
+                                        }
                                     }
                                 }
                                 ElementState::Released => {
                                     mouse_state.left = ClickState::Up;
-                                    selected_node = None;
+                                    mouse_action = None;
                                 }
                             },
                             _ => {}
@@ -122,10 +147,20 @@ fn main() {
                             let delta_x = position.x - mouse_state.position.x;
                             let delta_y = position.y - mouse_state.position.y;
                             mouse_state.position = position;
-                            if let Some(selected) = selected_node {
-                                if let Some(selected) = graph.metadata_mut(selected) {
-                                    selected.position.x += delta_x as f32;
-                                    selected.position.y += delta_y as f32;
+                            if let Some(MouseActionContext { node, action }) = mouse_action {
+                                match action {
+                                    Action::Move => {
+                                        if let Some(selected) = graph.metadata_mut(node) {
+                                            selected.position.x += delta_x as f32;
+                                            selected.position.y += delta_y as f32;
+                                        }
+                                    }
+                                    Action::Resize => {
+                                        if let Some(selected) = graph.metadata_mut(node) {
+                                            selected.dimensions.width += delta_x as f32;
+                                            selected.dimensions.height += delta_y as f32;
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -147,6 +182,7 @@ fn main() {
                 }
             },
             Event::RedrawRequested(_) => {
+                ctx.clear_color(0.1, 0.1, 0.1, 1.);
                 ctx.clear();
                 {
                     let start = std::time::Instant::now();

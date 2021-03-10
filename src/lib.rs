@@ -22,12 +22,61 @@ pub struct Metadata {
     pub dimensions: Dimensions,
 }
 
+pub fn rect_contains(rect: &Rectangle, x: f32, y: f32) -> bool {
+    let x1 = rect.x;
+    let y1 = rect.y;
+    let x2 = x1 + rect.width;
+    let y2 = y1 + rect.height;
+    x > x1 && x < x2 && y > y1 && y < y2
+}
+
 impl Metadata {
+    const TOP_BAR_HEIGHT: f32 = 16.;
+    const OUTPUT_WIDTH: f32 = 16.;
+
     pub fn contains(&self, x: f32, y: f32) -> bool {
-        let Position { x: x1, y: y1 } = self.position;
-        let x2 = x1 + self.dimensions.width;
-        let y2 = y1 + self.dimensions.height;
-        x > x1 && x < x2 && y > y1 && y < y2
+        let rect = self.into();
+        rect_contains(&rect, x, y)
+    }
+
+    pub fn top_bar(&self) -> Rectangle {
+        Rectangle {
+            x: self.position.x,
+            y: self.position.y,
+            width: self.dimensions.width,
+            height: Self::TOP_BAR_HEIGHT,
+        }
+    }
+
+    pub fn input(&self, index: usize) -> Rectangle {
+        let y = self.position.y + Self::TOP_BAR_HEIGHT;
+        let width = self.dimensions.width - Self::OUTPUT_WIDTH * 2.;
+        Rectangle {
+            x: self.position.x,
+            y: y + (index as f32 + 1.) * Self::TOP_BAR_HEIGHT,
+            width,
+            height: Self::TOP_BAR_HEIGHT,
+        }
+    }
+
+    pub fn output(&self) -> Rectangle {
+        Rectangle {
+            x: self.position.x + self.dimensions.width - Self::OUTPUT_WIDTH,
+            y: self.position.y + Self::TOP_BAR_HEIGHT,
+            width: Self::OUTPUT_WIDTH,
+            height: self.dimensions.height - Self::TOP_BAR_HEIGHT - Self::OUTPUT_WIDTH,
+        }
+    }
+
+    pub fn resize(&self) -> Rectangle {
+        let x = self.position.x + self.dimensions.width - Self::OUTPUT_WIDTH;
+        let y = self.position.y + self.dimensions.height - Self::OUTPUT_WIDTH;
+        Rectangle {
+            x,
+            y,
+            width: Self::OUTPUT_WIDTH,
+            height: Self::OUTPUT_WIDTH,
+        }
     }
 }
 
@@ -113,16 +162,37 @@ impl UIGraph {
     }
 
     pub fn render(&self, mut g: solstice_2d::GraphicsLock) {
+        let black = Color::new(0., 0., 0., 1.);
         for (id, metadata) in self.metadata.iter() {
             if let Some(node) = self.inner.nodes().get(id) {
-                let background = metadata.into();
+                let background: Rectangle = metadata.into();
                 g.draw_with_color(background, Color::new(1., 0., 0., 1.));
-                g.print(node.name(), self.font, 16., background);
+                g.stroke_with_color(background, black);
+
+                g.draw_with_color(metadata.top_bar(), Color::new(0.3, 0.3, 0.3, 1.));
+                g.stroke_with_color(metadata.top_bar(), black);
+                let text_bounds = Rectangle {
+                    x: background.x + 5.,
+                    ..background
+                };
+                g.print(node.name(), self.font, 16., text_bounds);
+
+                g.draw_with_color(metadata.output(), Color::new(1., 1., 0., 1.));
+                g.stroke_with_color(metadata.output(), black);
+
+                g.draw_with_color(metadata.resize(), Color::new(1., 0., 1., 1.));
+                g.stroke_with_color(metadata.resize(), black);
+
                 if let Some(input_group) = node.inputs().iter().next() {
-                    let Position { x, y } = metadata.position;
                     for (index, input) in input_group.iter().enumerate() {
-                        let y = y + (index + 2) as f32 * 16.;
-                        g.print(input.name, self.font, 16., Rectangle::new(x, y, 100., 100.));
+                        let rect: Rectangle = metadata.input(index);
+                        g.draw_with_color(rect, Color::new(0., 0., 1., 1.));
+                        g.stroke_with_color(rect, black);
+                        let text_bounds = Rectangle {
+                            x: rect.x + 5.,
+                            ..rect
+                        };
+                        g.print(input.name, self.font, 16., text_bounds);
                     }
                 }
             }
@@ -132,13 +202,19 @@ impl UIGraph {
             let to = self.metadata.get(connection.to);
             let from = self.metadata.get(connection.from);
             if let (Some(from), Some(to)) = (from, to) {
-                let from_pos = Position {
-                    x: from.position.x + 100.,
-                    y: from.position.y + 50.,
+                let from_pos = {
+                    let rect = from.output();
+                    Position {
+                        x: rect.x + rect.width / 2.,
+                        y: rect.y + rect.height / 2.,
+                    }
                 };
-                let to_pos = Position {
-                    x: to.position.x,
-                    y: to.position.y + (connection.input as f32 + 2.5) * 16.,
+                let to_pos = {
+                    let rect = to.input(connection.input);
+                    Position {
+                        x: rect.x,
+                        y: rect.y + rect.height / 2.,
+                    }
                 };
                 let points = std::array::IntoIter::new([from_pos, to_pos]).map(|p| LineVertex {
                     position: [p.x, p.y, 0.],
