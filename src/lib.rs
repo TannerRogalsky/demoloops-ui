@@ -73,6 +73,12 @@ impl UIGraph {
                     16.,
                     Rectangle::new(x, y, 100., 100.),
                 );
+                if let Some(input_group) = node.inputs().iter().next() {
+                    for (index, input) in input_group.iter().enumerate() {
+                        let y = y + (index + 2) as f32 * 16.;
+                        g.print(input.name, self.font, 16., Rectangle::new(x, y, 100., 100.));
+                    }
+                }
             }
         }
 
@@ -82,10 +88,14 @@ impl UIGraph {
             if let (Some(from), Some(to)) = (from, to) {
                 let from_pos = Position {
                     x: from.position.x + 100.,
-                    y: from.position.y + 100.,
+                    y: from.position.y + 50.,
+                };
+                let to_pos = Position {
+                    x: to.position.x,
+                    y: to.position.y + (connection.input as f32 + 2.5) * 16.
                 };
                 let points =
-                    std::array::IntoIter::new([from_pos, to.position]).map(|p| LineVertex {
+                    std::array::IntoIter::new([from_pos, to_pos]).map(|p| LineVertex {
                         position: [p.x, p.y, 0.],
                         width: 5.0,
                         ..LineVertex::default()

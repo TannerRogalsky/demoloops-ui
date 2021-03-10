@@ -1,4 +1,4 @@
-use nodes::{Many, Node, NodeInput, NodeOutput, One};
+use nodes::{InputInfo, Many, Node, NodeInput, NodeOutput, One};
 use solstice_2d::Rectangle;
 use std::any::Any;
 
@@ -69,20 +69,41 @@ where
     }
 }
 
+macro_rules! rect_types {
+    ($x: ty, $y: ty, $w: ty, $h: ty) => {
+        impl RectangleInput<$x, $y, $w, $h> {
+            pub const fn types() -> &'static [InputInfo; 4] {
+                &[
+                    InputInfo {
+                        name: "x",
+                        ty_name: stringify!($x),
+                    },
+                    InputInfo {
+                        name: "y",
+                        ty_name: stringify!($y),
+                    },
+                    InputInfo {
+                        name: "width",
+                        ty_name: stringify!($w),
+                    },
+                    InputInfo {
+                        name: "height",
+                        ty_name: stringify!($h),
+                    },
+                ]
+            }
+        }
+    };
+}
+
+rect_types!(One<f32>, One<f32>, One<f32>, One<f32>);
+rect_types!(Many<f32>, One<f32>, One<f32>, One<f32>);
+rect_types!(Many<f32>, Many<f32>, Many<f32>, Many<f32>);
+
 enum RectangleNodeInput {
     One(RectangleInput<One<f32>, One<f32>, One<f32>, One<f32>>),
     ManyOneOneOne(RectangleInput<Many<f32>, One<f32>, One<f32>, One<f32>>),
     Many(RectangleInput<Many<f32>, Many<f32>, Many<f32>, Many<f32>>),
-}
-
-trait InputValue {
-    fn can_match(inputs: &[Box<dyn Any>]) -> bool;
-    fn op(self) -> Box<dyn Any>
-    where
-        Self: Sized;
-    fn from_any(inputs: &mut Vec<Box<dyn Any>>) -> Result<Self, ()>
-    where
-        Self: Sized;
 }
 
 impl RectangleNodeInput {
@@ -90,6 +111,14 @@ impl RectangleNodeInput {
         RectangleInput::<One<f32>, One<f32>, One<f32>, One<f32>>::can_match(inputs)
             || RectangleInput::<Many<f32>, One<f32>, One<f32>, One<f32>>::can_match(inputs)
             || RectangleInput::<Many<f32>, Many<f32>, Many<f32>, Many<f32>>::can_match(inputs)
+    }
+    const fn types() -> &'static [&'static [InputInfo]] {
+        const GROUPS: [&'static [InputInfo]; 3] = [
+            RectangleInput::<One<f32>, One<f32>, One<f32>, One<f32>>::types(),
+            RectangleInput::<Many<f32>, One<f32>, One<f32>, One<f32>>::types(),
+            RectangleInput::<Many<f32>, Many<f32>, Many<f32>, Many<f32>>::types(),
+        ];
+        &GROUPS
     }
     fn op(self) -> Box<dyn Any> {
         match self {
@@ -157,6 +186,10 @@ pub struct RectangleNode;
 impl NodeInput for RectangleNode {
     fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> bool {
         RectangleNodeInput::can_match(inputs)
+    }
+
+    fn inputs(&self) -> &'static [&'static [InputInfo]] {
+        RectangleNodeInput::types()
     }
 }
 

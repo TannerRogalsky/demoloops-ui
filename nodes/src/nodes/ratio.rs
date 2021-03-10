@@ -1,4 +1,4 @@
-use crate::{FromAny, Many, Node, NodeInput, NodeOutput, One, Pair};
+use crate::{FromAny, InputInfo, Many, Node, NodeInput, NodeOutput, One, Pair};
 use std::any::Any;
 
 #[derive(Debug, Clone)]
@@ -9,6 +9,21 @@ where
     OneOne(Pair<One<T>, One<T>>),
     OneMany(Pair<One<T>, Many<T>>),
 }
+
+macro_rules! group_impl {
+    ($t: ty) => {
+        impl RatioGroup<$t> {
+            const fn types() -> [&'static [InputInfo]; 2] {
+                [
+                    Pair::<One<$t>, One<$t>>::types(),
+                    Pair::<One<$t>, Many<$t>>::types(),
+                ]
+            }
+        }
+    };
+}
+group_impl!(f32);
+group_impl!(u32);
 
 impl<T> RatioGroup<T>
 where
@@ -69,6 +84,12 @@ impl RatioNodeInput {
     fn can_match(inputs: &[Box<dyn Any>]) -> bool {
         RatioGroup::<f32>::can_match(inputs) || RatioGroup::<u32>::can_match(inputs)
     }
+
+    const fn types() -> &'static [&'static [InputInfo]] {
+        const GROUPS: [&'static [InputInfo]; 4] =
+            crate::concat(RatioGroup::<f32>::types(), RatioGroup::<u32>::types());
+        &GROUPS
+    }
 }
 
 impl FromAny for RatioNodeInput {
@@ -89,6 +110,10 @@ pub struct RatioNode;
 impl NodeInput for RatioNode {
     fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> bool {
         RatioNodeInput::can_match(inputs)
+    }
+
+    fn inputs(&self) -> &'static [&'static [InputInfo]] {
+        RatioNodeInput::types()
     }
 }
 

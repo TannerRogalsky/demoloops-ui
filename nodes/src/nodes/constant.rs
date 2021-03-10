@@ -1,4 +1,4 @@
-use crate::One;
+use crate::{InputInfo, One};
 use std::any::Any;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -14,6 +14,10 @@ impl crate::NodeInput for ConstantNode {
 
     fn is_terminator(&self) -> bool {
         true
+    }
+
+    fn inputs(&self) -> &'static [&'static [InputInfo]] {
+        &[]
     }
 }
 

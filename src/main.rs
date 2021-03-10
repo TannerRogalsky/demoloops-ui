@@ -25,6 +25,7 @@ fn main() {
     let count = graph.add_node(ConstantNode::Unsigned(6), 100., 100.);
     let range = graph.add_node(RangeNode, 100., 210.);
     let d = graph.add_node(ConstantNode::Float(100.), 100., 500.);
+    let y = graph.add_node(ConstantNode::Float(10.), 100., 610.);
     let offset = graph.add_node(ConstantNode::Float(900.), 500., 100.);
     let ratio = graph.add_node(RatioNode, 300., 320.);
     let multiply = graph.add_node(MultiplyNode, 500., 210.);
@@ -39,7 +40,7 @@ fn main() {
     graph.connect(ratio, multiply, 1);
 
     graph.connect(multiply, rect, 0);
-    graph.connect(d, rect, 1);
+    graph.connect(y, rect, 1);
     graph.connect(d, rect, 2);
     graph.connect(d, rect, 3);
     graph.connect(rect, graph.root(), 0);

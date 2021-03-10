@@ -1,4 +1,4 @@
-use nodes::{Many, Node, NodeInput, NodeOutput, One};
+use nodes::{InputInfo, Many, Node, NodeInput, NodeOutput, One};
 use solstice_2d::{Color, Draw, Rectangle};
 use std::any::Any;
 
@@ -12,6 +12,19 @@ impl NodeInput for DrawNode {
         } else {
             false
         }
+    }
+
+    fn inputs(&self) -> &'static [&'static [InputInfo]] {
+        &[
+            &[InputInfo {
+                name: "geometry",
+                ty_name: "One<Rectangle>",
+            }],
+            &[InputInfo {
+                name: "geometry",
+                ty_name: "Many<Rectangle>",
+            }],
+        ]
     }
 }
 

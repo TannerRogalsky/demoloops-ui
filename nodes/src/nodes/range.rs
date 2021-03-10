@@ -1,4 +1,4 @@
-use crate::{FromAny, Many, Node, NodeInput, NodeOutput, One};
+use crate::{FromAny, InputInfo, Many, Node, NodeInput, NodeOutput, One};
 use std::any::Any;
 
 #[derive(Copy, Clone)]
@@ -17,6 +17,13 @@ impl RangeNodeInput {
 
     fn op(self) -> Box<dyn Any> {
         Box::new(Many::from(0..self.length.inner()))
+    }
+
+    const fn types() -> &'static [&'static [InputInfo]] {
+        &[&[InputInfo {
+            name: "length",
+            ty_name: "One<u32>",
+        }]]
     }
 }
 
@@ -42,6 +49,10 @@ pub struct RangeNode;
 impl NodeInput for RangeNode {
     fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> bool {
         RangeNodeInput::can_match(inputs)
+    }
+
+    fn inputs(&self) -> &'static [&'static [InputInfo]] {
+        RangeNodeInput::types()
     }
 }
 
@@ -78,6 +89,19 @@ impl Range2DNodeInput {
         let iter = (0..self.x.length.inner()).flat_map(move |vx| (0..y).map(move |vy| vy + vx * y));
         Box::new(Many::from(iter))
     }
+
+    const fn types() -> &'static [&'static [InputInfo]] {
+        &[&[
+            InputInfo {
+                name: "x",
+                ty_name: "One<f32>",
+            },
+            InputInfo {
+                name: "y",
+                ty_name: "One<f32>",
+            },
+        ]]
+    }
 }
 
 impl FromAny for Range2DNodeInput {
@@ -105,6 +129,10 @@ pub struct Range2DNode;
 impl NodeInput for Range2DNode {
     fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> bool {
         Range2DNodeInput::can_match(inputs)
+    }
+
+    fn inputs(&self) -> &'static [&'static [InputInfo]] {
+        Range2DNodeInput::types()
     }
 }
 

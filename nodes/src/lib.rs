@@ -105,11 +105,63 @@ pub trait FromAny {
         Self: Sized;
 }
 
+const fn concat<'a, const A: usize, const B: usize, const C: usize>(
+    a: [&'a [InputInfo]; A],
+    b: [&'a [InputInfo]; B],
+) -> [&'a [InputInfo]; C] {
+    // Assert that `A + B == C`.
+    // These overflow if that is not the case, which produces an error at compile-time.
+    let _ = C - (A + B); // Assert that `A + B <= C`
+    let _ = (A + B) - C; // Assert that `A + B >= C`
+
+    let mut result: [&'a [InputInfo]; C] = [&[]; C];
+
+    let mut i = 0;
+    while i < A {
+        result[i] = a[i];
+        i += 1;
+    }
+
+    while i < A + B {
+        result[i] = b[i - A];
+        i += 1;
+    }
+
+    result
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct Pair<A, B> {
     lhs: A,
     rhs: B,
 }
+
+macro_rules! pair_impl {
+    ($a: ty, $b: ty) => {
+        impl Pair<$a, $b> {
+            const fn types() -> &'static [InputInfo; 2] {
+                const V: [InputInfo; 2] = [
+                    InputInfo {
+                        name: "lhs",
+                        ty_name: stringify!($a),
+                    },
+                    InputInfo {
+                        name: "rhs",
+                        ty_name: stringify!($b),
+                    },
+                ];
+                &V
+            }
+        }
+    };
+}
+
+pair_impl!(One<f32>, One<f32>);
+pair_impl!(One<f32>, Many<f32>);
+pair_impl!(Many<f32>, Many<f32>);
+pair_impl!(One<u32>, One<u32>);
+pair_impl!(One<u32>, Many<u32>);
+pair_impl!(Many<u32>, Many<u32>);
 
 impl<A, B> Pair<A, B>
 where
@@ -166,11 +218,18 @@ where
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct InputInfo {
+    pub name: &'static str,
+    pub ty_name: &'static str,
+}
+
 pub trait NodeInput {
     fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> bool;
     fn is_terminator(&self) -> bool {
         false
     }
+    fn inputs(&self) -> &'static [&'static [InputInfo]];
 }
 
 pub trait NodeOutput {
