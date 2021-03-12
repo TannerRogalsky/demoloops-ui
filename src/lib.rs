@@ -127,6 +127,10 @@ impl UIGraph {
         &self.inner
     }
 
+    pub fn node_mut(&mut self, id: NodeID) -> Option<&mut dyn ::nodes::Node> {
+        self.inner.node_mut(id)
+    }
+
     pub fn root(&self) -> NodeID {
         self.inner.root()
     }
@@ -211,7 +215,9 @@ impl UIGraph {
                             x: metadata.position.x + 5.,
                             y: metadata.position.y + Metadata::TOP_BAR_HEIGHT * 2.,
                             width: metadata.dimensions.width - Metadata::OUTPUT_WIDTH,
-                            height: metadata.dimensions.height - 10. - Metadata::TOP_BAR_HEIGHT * 2.
+                            height: metadata.dimensions.height
+                                - 10.
+                                - Metadata::TOP_BAR_HEIGHT * 2.,
                         };
                         g.print(text, self.font, 32., bounds);
                     }

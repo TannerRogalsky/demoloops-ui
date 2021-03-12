@@ -31,9 +31,6 @@ impl crate::NodeOutput for ConstantNode {
 #[typetag::serde]
 impl crate::Node for ConstantNode {
     fn name(&self) -> &'static str {
-        match self {
-            ConstantNode::Unsigned(_) => "unsigned constant",
-            ConstantNode::Float(_) => "float constant",
-        }
+        "constant"
     }
 }

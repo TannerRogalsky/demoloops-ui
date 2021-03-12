@@ -322,6 +322,9 @@ impl Graph {
     pub fn nodes(&self) -> &SlotMap<NodeID, Box<dyn Node>> {
         &self.nodes
     }
+    pub fn node_mut(&mut self, id: NodeID) -> Option<&mut dyn Node> {
+        self.nodes.get_mut(id).map(Box::as_mut)
+    }
     pub fn connections(&self) -> &[Connection] {
         self.connections.as_slice()
     }

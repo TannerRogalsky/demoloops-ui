@@ -72,17 +72,18 @@ fn main() {
         left: ClickState::Up,
     };
 
-    #[derive(Copy, Clone)]
+    #[derive(Debug, Copy, Clone)]
     enum Action {
         Move,
         Resize,
+        Edit,
     }
-    #[derive(Copy, Clone)]
-    struct MouseActionContext {
-        node: NodeID,
+    #[derive(Debug, Copy, Clone)]
+    struct ActionContext {
+        node_id: NodeID,
         action: Action,
     }
-    let mut mouse_action: Option<MouseActionContext> = None;
+    let mut action_context: Option<ActionContext> = None;
 
     let mut show_graph = true;
     let mut times = std::collections::VecDeque::with_capacity(60);
@@ -107,11 +108,53 @@ fn main() {
                                     ..
                                 },
                             ..
-                        } => match keycode {
-                            VirtualKeyCode::Escape => *control_flow = ControlFlow::Exit,
-                            VirtualKeyCode::Grave => show_graph = !show_graph,
-                            _ => (),
-                        },
+                        } => {
+                            if let Some(ActionContext { node_id, action }) = action_context {
+                                if let Action::Edit = action {
+                                    if let Some(node) = graph
+                                        .node_mut(node_id)
+                                        .and_then(|n| n.downcast_mut::<ConstantNode>())
+                                    {
+                                        let new_char = match keycode {
+                                            VirtualKeyCode::Key1 => Some('1'),
+                                            VirtualKeyCode::Key2 => Some('2'),
+                                            VirtualKeyCode::Key3 => Some('3'),
+                                            VirtualKeyCode::Key4 => Some('4'),
+                                            VirtualKeyCode::Key5 => Some('5'),
+                                            VirtualKeyCode::Key6 => Some('6'),
+                                            VirtualKeyCode::Key7 => Some('7'),
+                                            VirtualKeyCode::Key8 => Some('8'),
+                                            VirtualKeyCode::Key9 => Some('9'),
+                                            VirtualKeyCode::Key0 => Some('0'),
+                                            VirtualKeyCode::Period => Some('.'),
+                                            VirtualKeyCode::Return => {
+                                                action_context = None;
+                                                None
+                                            }
+                                            _ => None,
+                                        };
+                                        if let Some(new_char) = new_char {
+                                            let mut current = match node {
+                                                ConstantNode::Unsigned(v) => v.to_string(),
+                                                ConstantNode::Float(v) => v.to_string(),
+                                            };
+                                            current.push(new_char);
+                                            if let Ok(v) = current.parse::<u32>() {
+                                                *node = ConstantNode::Unsigned(v);
+                                            } else if let Ok(v) = current.parse::<f32>() {
+                                                *node = ConstantNode::Float(v);
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                match keycode {
+                                    VirtualKeyCode::Escape => *control_flow = ControlFlow::Exit,
+                                    VirtualKeyCode::Grave => show_graph = !show_graph,
+                                    _ => (),
+                                }
+                            }
+                        }
                         WindowEvent::MouseInput { state, button, .. } => match button {
                             MouseButton::Left => match state {
                                 ElementState::Pressed => {
@@ -122,23 +165,36 @@ fn main() {
                                         .metadata()
                                         .iter()
                                         .find(|(_id, metadata)| metadata.contains(x, y));
-                                    if let Some((node, metadata)) = selected {
+                                    if let Some((node_id, metadata)) = selected {
                                         if rect_contains(&metadata.top_bar(), x, y) {
-                                            mouse_action = Some(MouseActionContext {
-                                                node,
+                                            action_context = Some(ActionContext {
+                                                node_id,
                                                 action: Action::Move,
                                             })
                                         } else if rect_contains(&metadata.resize(), x, y) {
-                                            mouse_action = Some(MouseActionContext {
-                                                node,
+                                            action_context = Some(ActionContext {
+                                                node_id,
                                                 action: Action::Resize,
                                             })
+                                        } else if let Some(node) = graph
+                                            .node_mut(node_id)
+                                            .and_then(|n| n.downcast_mut::<ConstantNode>())
+                                        {
+                                            *node = ConstantNode::Unsigned(0);
+                                            action_context = Some(ActionContext {
+                                                node_id,
+                                                action: Action::Edit,
+                                            });
                                         }
                                     }
                                 }
                                 ElementState::Released => {
                                     mouse_state.left = ClickState::Up;
-                                    mouse_action = None;
+                                    if let Some(Action::Edit) = action_context.map(|ctx| ctx.action)
+                                    {
+                                    } else {
+                                        action_context = None;
+                                    }
                                 }
                             },
                             _ => {}
@@ -147,20 +203,21 @@ fn main() {
                             let delta_x = position.x - mouse_state.position.x;
                             let delta_y = position.y - mouse_state.position.y;
                             mouse_state.position = position;
-                            if let Some(MouseActionContext { node, action }) = mouse_action {
+                            if let Some(ActionContext { node_id, action }) = action_context {
                                 match action {
                                     Action::Move => {
-                                        if let Some(selected) = graph.metadata_mut(node) {
+                                        if let Some(selected) = graph.metadata_mut(node_id) {
                                             selected.position.x += delta_x as f32;
                                             selected.position.y += delta_y as f32;
                                         }
                                     }
                                     Action::Resize => {
-                                        if let Some(selected) = graph.metadata_mut(node) {
+                                        if let Some(selected) = graph.metadata_mut(node_id) {
                                             selected.dimensions.width += delta_x as f32;
                                             selected.dimensions.height += delta_y as f32;
                                         }
                                     }
+                                    Action::Edit => {}
                                 }
                             }
                         }
