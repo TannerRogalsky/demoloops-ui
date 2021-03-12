@@ -195,6 +195,27 @@ impl UIGraph {
                         g.print(input.name, self.font, 16., text_bounds);
                     }
                 }
+
+                {
+                    use ::nodes::ConstantNode;
+                    if let Some(constant) = node.downcast_ref::<ConstantNode>() {
+                        let text = match constant {
+                            ConstantNode::Unsigned(v) => {
+                                format!("{}", v)
+                            }
+                            ConstantNode::Float(v) => {
+                                format!("{:.1}", v)
+                            }
+                        };
+                        let bounds = Rectangle {
+                            x: metadata.position.x + 5.,
+                            y: metadata.position.y + Metadata::TOP_BAR_HEIGHT * 2.,
+                            width: metadata.dimensions.width - Metadata::OUTPUT_WIDTH,
+                            height: metadata.dimensions.height - 10. - Metadata::TOP_BAR_HEIGHT * 2.
+                        };
+                        g.print(text, self.font, 32., bounds);
+                    }
+                }
             }
         }
 

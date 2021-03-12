@@ -237,10 +237,45 @@ pub trait NodeOutput {
 }
 
 #[typetag::serde(tag = "type")]
-pub trait Node: std::fmt::Debug + dyn_clone::DynClone + NodeInput + NodeOutput {
+pub trait Node: std::fmt::Debug + dyn_clone::DynClone + NodeInput + NodeOutput + Any {
     fn name(&self) -> &'static str;
 }
 dyn_clone::clone_trait_object!(Node);
+
+impl dyn Node {
+    pub fn is<T: Node>(&self) -> bool {
+        // Get `TypeId` of the type this function is instantiated with.
+        let t = std::any::TypeId::of::<T>();
+
+        // Get `TypeId` of the type in the trait object (`self`).
+        let concrete = self.type_id();
+
+        // Compare both `TypeId`s on equality.
+        t == concrete
+    }
+
+    pub fn downcast_ref<T: Node>(&self) -> Option<&T> {
+        if self.is::<T>() {
+            // SAFETY: just checked whether we are pointing to the correct type, and we can rely on
+            // that check for memory safety because we have implemented Any for all types; no other
+            // impls can exist as they would conflict with our impl.
+            unsafe { Some(&*(self as *const dyn Node as *const T)) }
+        } else {
+            None
+        }
+    }
+
+    pub fn downcast_mut<T: Node>(&mut self) -> Option<&mut T> {
+        if self.is::<T>() {
+            // SAFETY: just checked whether we are pointing to the correct type, and we can rely on
+            // that check for memory safety because we have implemented Any for all types; no other
+            // impls can exist as they would conflict with our impl.
+            unsafe { Some(&mut *(self as *mut dyn Node as *mut T)) }
+        } else {
+            None
+        }
+    }
+}
 
 slotmap::new_key_type! {
     pub struct NodeID;

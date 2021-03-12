@@ -1,7 +1,7 @@
 use crate::{InputInfo, One};
 use std::any::Any;
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ConstantNode {
     Unsigned(u32),
     Float(f32),
@@ -11,11 +11,9 @@ impl crate::NodeInput for ConstantNode {
     fn inputs_match(&self, _inputs: &[Box<dyn Any>]) -> bool {
         false
     }
-
     fn is_terminator(&self) -> bool {
         true
     }
-
     fn inputs(&self) -> &'static [&'static [InputInfo]] {
         &[]
     }
