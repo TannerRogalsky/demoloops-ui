@@ -187,8 +187,8 @@ impl UIGraph {
                 g.draw_with_color(metadata.resize(), Color::new(1., 0., 1., 1.));
                 g.stroke_with_color(metadata.resize(), black);
 
-                if let Some(input_group) = node.inputs().iter().next() {
-                    for (index, input) in input_group.iter().enumerate() {
+                if let Some(input_group) = node.inputs().groups.iter().next() {
+                    for (index, input) in input_group.info.iter().enumerate() {
                         let rect: Rectangle = metadata.input(index);
                         g.draw_with_color(rect, Color::new(0., 0., 1., 1.));
                         g.stroke_with_color(rect, black);
@@ -255,16 +255,4 @@ impl UIGraph {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use ::nodes::*;
-
-    #[test]
-    fn serialize() {
-        let mut graph = Graph::with_root(DrawNode);
-        graph.add_node(ConstantNode::Float(123.213));
-        graph.add_node(RatioNode);
-        graph.add_node(MultiplyNode);
-        println!("{}", serde_json::to_string_pretty(&graph).unwrap());
-    }
-}
+mod tests {}

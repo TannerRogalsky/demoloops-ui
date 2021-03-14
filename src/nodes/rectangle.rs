@@ -1,6 +1,8 @@
-use nodes::{InputInfo, Many, Node, NodeInput, NodeOutput, One};
+use nodes::{
+    InputGroup, InputInfo, InputMatchError, Many, Node, NodeInput, NodeOutput, One, PossibleInputs,
+};
 use solstice_2d::Rectangle;
-use std::any::Any;
+use std::any::{Any, TypeId};
 
 struct RectangleInput<X, Y, W, H> {
     x: X,
@@ -60,37 +62,67 @@ where
     C: 'static,
     D: 'static,
 {
-    fn can_match(inputs: &[Box<dyn Any>]) -> bool {
-        inputs.len() == 4
-            && inputs[0].is::<A>()
-            && inputs[1].is::<B>()
-            && inputs[2].is::<C>()
-            && inputs[3].is::<D>()
+    fn can_match(inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
+        if inputs.len() == 4 {
+            if !inputs[0].is::<A>() {
+                Some(InputMatchError::TypeMismatch {
+                    index: 0,
+                    type_id: TypeId::of::<A>(),
+                })
+            } else if !inputs[1].is::<B>() {
+                Some(InputMatchError::TypeMismatch {
+                    index: 1,
+                    type_id: TypeId::of::<B>(),
+                })
+            } else if !inputs[2].is::<C>() {
+                Some(InputMatchError::TypeMismatch {
+                    index: 2,
+                    type_id: TypeId::of::<C>(),
+                })
+            } else if !inputs[3].is::<D>() {
+                Some(InputMatchError::TypeMismatch {
+                    index: 3,
+                    type_id: TypeId::of::<D>(),
+                })
+            } else {
+                None
+            }
+        } else {
+            Some(InputMatchError::LengthMismatch { desired: 4 })
+        }
     }
 }
 
 macro_rules! rect_types {
     ($x: ty, $y: ty, $w: ty, $h: ty) => {
         impl RectangleInput<$x, $y, $w, $h> {
-            pub const fn types() -> &'static [InputInfo; 4] {
-                &[
-                    InputInfo {
-                        name: "x",
-                        ty_name: stringify!($x),
-                    },
-                    InputInfo {
-                        name: "y",
-                        ty_name: stringify!($y),
-                    },
-                    InputInfo {
-                        name: "width",
-                        ty_name: stringify!($w),
-                    },
-                    InputInfo {
-                        name: "height",
-                        ty_name: stringify!($h),
-                    },
-                ]
+            fn types() -> InputGroup<'static> {
+                use once_cell::sync::Lazy;
+                static INPUTS: Lazy<Vec<InputInfo>> = Lazy::new(|| {
+                    vec![
+                        InputInfo {
+                            name: "x",
+                            ty_name: stringify!($x),
+                            type_id: std::any::TypeId::of::<$x>(),
+                        },
+                        InputInfo {
+                            name: "y",
+                            ty_name: stringify!($y),
+                            type_id: std::any::TypeId::of::<$y>(),
+                        },
+                        InputInfo {
+                            name: "width",
+                            ty_name: stringify!($w),
+                            type_id: std::any::TypeId::of::<$w>(),
+                        },
+                        InputInfo {
+                            name: "height",
+                            ty_name: stringify!($h),
+                            type_id: std::any::TypeId::of::<$h>(),
+                        },
+                    ]
+                });
+                InputGroup { info: &*INPUTS }
             }
         }
     };
@@ -107,18 +139,25 @@ enum RectangleNodeInput {
 }
 
 impl RectangleNodeInput {
-    fn can_match(inputs: &[Box<dyn Any>]) -> bool {
+    fn can_match(inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
         RectangleInput::<One<f32>, One<f32>, One<f32>, One<f32>>::can_match(inputs)
-            || RectangleInput::<Many<f32>, One<f32>, One<f32>, One<f32>>::can_match(inputs)
-            || RectangleInput::<Many<f32>, Many<f32>, Many<f32>, Many<f32>>::can_match(inputs)
+            .or_else(|| {
+                RectangleInput::<Many<f32>, One<f32>, One<f32>, One<f32>>::can_match(inputs)
+            })
+            .or_else(|| {
+                RectangleInput::<Many<f32>, Many<f32>, Many<f32>, Many<f32>>::can_match(inputs)
+            })
     }
-    const fn types() -> &'static [&'static [InputInfo]] {
-        const GROUPS: [&'static [InputInfo]; 3] = [
-            RectangleInput::<One<f32>, One<f32>, One<f32>, One<f32>>::types(),
-            RectangleInput::<Many<f32>, One<f32>, One<f32>, One<f32>>::types(),
-            RectangleInput::<Many<f32>, Many<f32>, Many<f32>, Many<f32>>::types(),
-        ];
-        &GROUPS
+    fn types() -> PossibleInputs<'static> {
+        use once_cell::sync::Lazy;
+        static GROUPS: Lazy<Vec<InputGroup>> = Lazy::new(|| {
+            vec![
+                RectangleInput::<One<f32>, One<f32>, One<f32>, One<f32>>::types(),
+                RectangleInput::<Many<f32>, One<f32>, One<f32>, One<f32>>::types(),
+                RectangleInput::<Many<f32>, Many<f32>, Many<f32>, Many<f32>>::types(),
+            ]
+        });
+        PossibleInputs { groups: &*GROUPS }
     }
     fn op(self) -> Box<dyn Any> {
         match self {
@@ -184,11 +223,11 @@ impl RectangleNodeInput {
 pub struct RectangleNode;
 
 impl NodeInput for RectangleNode {
-    fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> bool {
+    fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
         RectangleNodeInput::can_match(inputs)
     }
 
-    fn inputs(&self) -> &'static [&'static [InputInfo]] {
+    fn inputs(&self) -> PossibleInputs<'static> {
         RectangleNodeInput::types()
     }
 }
@@ -233,5 +272,18 @@ mod tests {
         let rects = output.unwrap().downcast::<Many<Rectangle>>();
         let rects = rects.unwrap().collect::<Vec<_>>();
         assert_eq!(count, rects.len());
+    }
+
+    #[test]
+    fn best_match() {
+        let inputs: Vec<Box<dyn Any>> = vec![
+            Box::new(One::new(1f32)),
+            Box::new(One::new(2f32)),
+            Box::new(One::new(3f32)),
+            Box::new(One::new(4u32)),
+        ];
+        let input_info = RectangleNode.inputs();
+        let group = input_info.best_match(&inputs).expect("expected error");
+        assert_eq!(3, group.score(&inputs));
     }
 }

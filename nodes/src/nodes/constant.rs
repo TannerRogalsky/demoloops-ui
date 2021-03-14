@@ -1,4 +1,4 @@
-use crate::{InputInfo, One};
+use crate::{InputMatchError, One, PossibleInputs};
 use std::any::Any;
 
 #[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]
@@ -8,14 +8,14 @@ pub enum ConstantNode {
 }
 
 impl crate::NodeInput for ConstantNode {
-    fn inputs_match(&self, _inputs: &[Box<dyn Any>]) -> bool {
-        false
+    fn inputs_match(&self, _inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
+        Some(InputMatchError::LengthMismatch { desired: 0 })
     }
     fn is_terminator(&self) -> bool {
         true
     }
-    fn inputs(&self) -> &'static [&'static [InputInfo]] {
-        &[]
+    fn inputs(&self) -> PossibleInputs {
+        PossibleInputs { groups: &[] }
     }
 }
 

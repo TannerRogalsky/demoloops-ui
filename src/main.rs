@@ -254,9 +254,22 @@ fn main() {
                             let dl = output.downcast::<One<DrawList>>().unwrap();
                             ctx2d.process(&mut ctx, &dl.inner());
                         }
-                        Err(problem) => {
-                            if let Some(problem) = graph.inner().nodes().get(problem) {
-                                eprintln!("error with {}", problem.name());
+                        Err(Error {
+                            executing_node,
+                            input,
+                        }) => {
+                            if let Some(problem) = graph.inner().nodes().get(executing_node) {
+                                if let Some(err) = problem.inputs().best_match(&input) {
+                                    let inputs = err
+                                        .info
+                                        .iter()
+                                        .map(|i| i.ty_name)
+                                        .collect::<Vec<_>>()
+                                        .join(", ");
+                                    eprintln!("{}", inputs);
+                                } else {
+                                    eprintln!("something went wrong with {} node", problem.name());
+                                }
                             }
                         }
                     }

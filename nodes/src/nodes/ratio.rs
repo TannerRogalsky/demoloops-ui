@@ -1,4 +1,7 @@
-use crate::{FromAny, InputInfo, Many, Node, NodeInput, NodeOutput, One, Pair};
+use crate::{
+    FromAny, InputGroup, InputMatchError, Many, Node, NodeInput, NodeOutput, One, Pair,
+    PossibleInputs,
+};
 use std::any::Any;
 
 #[derive(Debug, Clone)]
@@ -13,7 +16,7 @@ where
 macro_rules! group_impl {
     ($t: ty) => {
         impl RatioGroup<$t> {
-            const fn types() -> [&'static [InputInfo]; 2] {
+            fn types() -> [InputGroup<'static>; 2] {
                 [
                     Pair::<One<$t>, One<$t>>::types(),
                     Pair::<One<$t>, Many<$t>>::types(),
@@ -29,8 +32,9 @@ impl<T> RatioGroup<T>
 where
     T: std::ops::Rem<Output = T> + Into<f64> + Copy + 'static,
 {
-    fn can_match(inputs: &[Box<dyn Any>]) -> bool {
-        Pair::<One<T>, One<T>>::can_match(inputs) || Pair::<One<T>, Many<T>>::can_match(inputs)
+    fn can_match(inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
+        Pair::<One<T>, One<T>>::can_match(inputs)
+            .or_else(|| Pair::<One<T>, Many<T>>::can_match(inputs))
     }
 }
 
@@ -81,14 +85,18 @@ impl RatioNodeInput {
         }
     }
 
-    fn can_match(inputs: &[Box<dyn Any>]) -> bool {
-        RatioGroup::<f32>::can_match(inputs) || RatioGroup::<u32>::can_match(inputs)
+    fn can_match(inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
+        RatioGroup::<f32>::can_match(inputs).or_else(|| RatioGroup::<u32>::can_match(inputs))
     }
 
-    const fn types() -> &'static [&'static [InputInfo]] {
-        const GROUPS: [&'static [InputInfo]; 4] =
-            crate::concat(RatioGroup::<f32>::types(), RatioGroup::<u32>::types());
-        &GROUPS
+    fn types() -> PossibleInputs<'static> {
+        use once_cell::sync::Lazy;
+        static GROUPS: Lazy<Vec<InputGroup>> = Lazy::new(|| {
+            let float = RatioGroup::<f32>::types();
+            let unsigned = RatioGroup::<u32>::types();
+            vec![float[0], float[1], unsigned[0], unsigned[1]]
+        });
+        PossibleInputs { groups: &*GROUPS }
     }
 }
 
@@ -108,11 +116,11 @@ impl FromAny for RatioNodeInput {
 pub struct RatioNode;
 
 impl NodeInput for RatioNode {
-    fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> bool {
+    fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
         RatioNodeInput::can_match(inputs)
     }
 
-    fn inputs(&self) -> &'static [&'static [InputInfo]] {
+    fn inputs(&self) -> PossibleInputs {
         RatioNodeInput::types()
     }
 }

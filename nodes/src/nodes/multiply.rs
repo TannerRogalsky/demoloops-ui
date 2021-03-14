@@ -1,4 +1,7 @@
-use crate::{FromAny, InputInfo, Many, Node, NodeInput, NodeOutput, One, Pair};
+use crate::{
+    FromAny, InputGroup, InputMatchError, Many, Node, NodeInput, NodeOutput, One, Pair,
+    PossibleInputs,
+};
 use std::any::Any;
 
 #[derive(Debug, Clone)]
@@ -11,7 +14,7 @@ enum MultiplyGroup<T> {
 macro_rules! group_impl {
     ($t: ty) => {
         impl MultiplyGroup<$t> {
-            const fn types() -> [&'static [InputInfo]; 3] {
+            fn types() -> [InputGroup<'static>; 3] {
                 [
                     Pair::<One<$t>, One<$t>>::types(),
                     Pair::<One<$t>, Many<$t>>::types(),
@@ -41,10 +44,10 @@ impl<T> MultiplyGroup<T>
 where
     T: 'static,
 {
-    fn can_match(inputs: &[Box<dyn Any>]) -> bool {
+    fn can_match(inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
         Pair::<One<T>, One<T>>::can_match(inputs)
-            || Pair::<One<T>, Many<T>>::can_match(inputs)
-            || Pair::<Many<T>, Many<T>>::can_match(inputs)
+            .or_else(|| Pair::<One<T>, Many<T>>::can_match(inputs))
+            .or_else(|| Pair::<Many<T>, Many<T>>::can_match(inputs))
     }
 }
 
@@ -79,14 +82,29 @@ impl MultiplyNodeInput {
         }
     }
 
-    fn can_match(inputs: &[Box<dyn Any>]) -> bool {
-        MultiplyGroup::<f32>::can_match(inputs) || MultiplyGroup::<u32>::can_match(inputs)
+    fn can_match(inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
+        MultiplyGroup::<f32>::can_match(inputs).or_else(|| MultiplyGroup::<u32>::can_match(inputs))
     }
 
-    const fn types() -> &'static [&'static [InputInfo]] {
-        const GROUPS: [&'static [InputInfo]; 6] =
-            crate::concat(MultiplyGroup::<f32>::types(), MultiplyGroup::<u32>::types());
-        &GROUPS
+    fn types() -> PossibleInputs<'static> {
+        use once_cell::sync::Lazy;
+        static INPUTS: Lazy<PossibleInputs> = Lazy::new(|| {
+            static GROUPS: Lazy<Vec<InputGroup>> = Lazy::new(|| {
+                let float = MultiplyGroup::<f32>::types();
+                let unsigned = MultiplyGroup::<u32>::types();
+                vec![
+                    float[0],
+                    float[1],
+                    float[2],
+                    unsigned[0],
+                    unsigned[1],
+                    unsigned[2],
+                ]
+            });
+
+            PossibleInputs { groups: &*GROUPS }
+        });
+        *INPUTS
     }
 }
 
@@ -109,11 +127,11 @@ impl FromAny for MultiplyNodeInput {
 pub struct MultiplyNode;
 
 impl NodeInput for MultiplyNode {
-    fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> bool {
+    fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
         MultiplyNodeInput::can_match(inputs)
     }
 
-    fn inputs(&self) -> &'static [&'static [InputInfo]] {
+    fn inputs(&self) -> PossibleInputs {
         MultiplyNodeInput::types()
     }
 }
@@ -138,6 +156,6 @@ mod tests {
     #[test]
     fn inputs() {
         let inputs = MultiplyNode.inputs();
-        assert_eq!(6, inputs.len());
+        assert_eq!(6, inputs.groups.len());
     }
 }

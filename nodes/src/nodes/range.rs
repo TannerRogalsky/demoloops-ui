@@ -1,5 +1,8 @@
-use crate::{FromAny, InputInfo, Many, Node, NodeInput, NodeOutput, One};
-use std::any::Any;
+use crate::{
+    FromAny, InputGroup, InputInfo, InputMatchError, Many, Node, NodeInput, NodeOutput, One,
+    PossibleInputs,
+};
+use std::any::{Any, TypeId};
 
 #[derive(Copy, Clone)]
 struct RangeNodeInput {
@@ -7,11 +10,18 @@ struct RangeNodeInput {
 }
 
 impl RangeNodeInput {
-    fn can_match(inputs: &[Box<dyn Any>]) -> bool {
+    fn can_match(inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
         if inputs.len() == 1 {
-            inputs[0].is::<One<u32>>()
+            if inputs[0].is::<One<u32>>() {
+                None
+            } else {
+                Some(InputMatchError::TypeMismatch {
+                    index: 0,
+                    type_id: TypeId::of::<One<u32>>(),
+                })
+            }
         } else {
-            false
+            Some(InputMatchError::LengthMismatch { desired: 1 })
         }
     }
 
@@ -19,11 +29,19 @@ impl RangeNodeInput {
         Box::new(Many::from(0..self.length.inner()))
     }
 
-    const fn types() -> &'static [&'static [InputInfo]] {
-        &[&[InputInfo {
-            name: "length",
-            ty_name: "One<u32>",
-        }]]
+    fn types() -> PossibleInputs<'static> {
+        use once_cell::sync::Lazy;
+        static GROUPS: Lazy<Vec<InputGroup>> = Lazy::new(|| {
+            static INFO: Lazy<Vec<InputInfo>> = Lazy::new(|| {
+                vec![InputInfo {
+                    name: "length",
+                    ty_name: "One<u32>",
+                    type_id: std::any::TypeId::of::<One<u32>>(),
+                }]
+            });
+            vec![InputGroup { info: &*INFO }]
+        });
+        PossibleInputs { groups: &*GROUPS }
     }
 }
 
@@ -47,11 +65,11 @@ impl FromAny for RangeNodeInput {
 pub struct RangeNode;
 
 impl NodeInput for RangeNode {
-    fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> bool {
+    fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
         RangeNodeInput::can_match(inputs)
     }
 
-    fn inputs(&self) -> &'static [&'static [InputInfo]] {
+    fn inputs(&self) -> PossibleInputs {
         RangeNodeInput::types()
     }
 }
@@ -76,11 +94,12 @@ struct Range2DNodeInput {
 }
 
 impl Range2DNodeInput {
-    fn can_match(inputs: &[Box<dyn Any>]) -> bool {
+    fn can_match(inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
         if inputs.len() == 2 {
-            RangeNodeInput::can_match(&inputs[..1]) && RangeNodeInput::can_match(&inputs[1..])
+            RangeNodeInput::can_match(&inputs[..1])
+                .or_else(|| RangeNodeInput::can_match(&inputs[1..]))
         } else {
-            false
+            Some(InputMatchError::LengthMismatch { desired: 2 })
         }
     }
 
@@ -90,17 +109,26 @@ impl Range2DNodeInput {
         Box::new(Many::from(iter))
     }
 
-    const fn types() -> &'static [&'static [InputInfo]] {
-        &[&[
-            InputInfo {
-                name: "x",
-                ty_name: "One<f32>",
-            },
-            InputInfo {
-                name: "y",
-                ty_name: "One<f32>",
-            },
-        ]]
+    fn types() -> PossibleInputs<'static> {
+        use once_cell::sync::Lazy;
+        static GROUPS: Lazy<Vec<InputGroup>> = Lazy::new(|| {
+            static INFO: Lazy<Vec<InputInfo>> = Lazy::new(|| {
+                vec![
+                    InputInfo {
+                        name: "x",
+                        ty_name: "One<f32>",
+                        type_id: std::any::TypeId::of::<One<f32>>(),
+                    },
+                    InputInfo {
+                        name: "y",
+                        ty_name: "One<f32>",
+                        type_id: std::any::TypeId::of::<One<f32>>(),
+                    },
+                ]
+            });
+            vec![InputGroup { info: &*INFO }]
+        });
+        PossibleInputs { groups: &*GROUPS }
     }
 }
 
@@ -127,11 +155,11 @@ impl FromAny for Range2DNodeInput {
 pub struct Range2DNode;
 
 impl NodeInput for Range2DNode {
-    fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> bool {
+    fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
         Range2DNodeInput::can_match(inputs)
     }
 
-    fn inputs(&self) -> &'static [&'static [InputInfo]] {
+    fn inputs(&self) -> PossibleInputs {
         Range2DNodeInput::types()
     }
 }

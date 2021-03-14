@@ -17,49 +17,6 @@ Let's consider an optimal definition for the inputs of a MultiplyNode.
 	Pair<One<u32>, Many<u32>>,
 	Pair<Many<u32>, Many<u32>>,
 ]
-
-struct Input {
-	slot_count: usize,
-}
-```
-
-```Rust
-trait Input {
-	fn slot_count(&self) -> usize;
-	fn types(&self) -> &[TypeID];
-}
-
-trait NodeInputs {
-	fn inputs(&self) -> &[&dyn Input];
-}
-
-#[derive(NodeInput)]
-struct Pair<A, B> {
-	lhs: A,
-	rhs: B,
-}
-
-#[derive(NodeInput)]
-enum MultGroup<T> {
-	OneOne(Pair<One<T>, One<T>>),
-	OneMany(Pair<One<T>, Many<T>>),
-	ManyMany(Pair<Many<T>, Many<T>>),
-}
-
-// This would need to flatten the inputs for all fields.
-#[derive(NodeInput)]
-enum Mult {
-	F32(MultGroup<f32>),
-	U32(MultGroup<u32>),
-}
-
-// Actually it sort of looks like this doesn't do anything since it'll be running in custom code in MultiplyNode's `op` function anyway.
-trait Node {
-	type Item: NodeInput;
-}
-
-#[derive(Node(Mult))]
-struct MultiplyNode;
 ```
 
 Empirically, I've found 3 functions useful for identifying, marshalling and transforming dynamic type data. I haven't found nor do I expect to have these as part of a public interface but they're helpful internally for breaking down data into manageable pieces.
@@ -75,6 +32,9 @@ trait InputData {
     fn op(self) -> Box<dyn Any> where Self: Sized;
 }
 ```
+
+### Error Reporting
+
 
 ### Reducing Heap Allocations
 Both `Many<T>` and the input/output traits use `Box<T>` to encapsulate the dynamic type system. If we deigned to elevate certain types to Supported to the exclusion of all others, the internals of `Many<T>` could be replaced with an enum of `Map`, `Zip`, etc. and the input/output traits could, similarly, receive an enum. The shape of the input/output enum would have to encapsulte both the elevated types are the one-many allowance in the system.
