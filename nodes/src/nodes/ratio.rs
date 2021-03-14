@@ -1,7 +1,4 @@
-use crate::{
-    FromAny, InputGroup, InputMatchError, Many, Node, NodeInput, NodeOutput, One, Pair,
-    PossibleInputs,
-};
+use crate::{FromAny, InputGroup, Many, Node, NodeInput, NodeOutput, One, Pair, PossibleInputs};
 use std::any::Any;
 
 #[derive(Debug, Clone)]
@@ -27,16 +24,6 @@ macro_rules! group_impl {
 }
 group_impl!(f32);
 group_impl!(u32);
-
-impl<T> RatioGroup<T>
-where
-    T: std::ops::Rem<Output = T> + Into<f64> + Copy + 'static,
-{
-    fn can_match(inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
-        Pair::<One<T>, One<T>>::can_match(inputs)
-            .or_else(|| Pair::<One<T>, Many<T>>::can_match(inputs))
-    }
-}
 
 impl<T> RatioGroup<T> {
     fn from_any(inputs: &mut Vec<Box<dyn std::any::Any>>) -> Result<Self, ()> {
@@ -85,10 +72,6 @@ impl RatioNodeInput {
         }
     }
 
-    fn can_match(inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
-        RatioGroup::<f32>::can_match(inputs).or_else(|| RatioGroup::<u32>::can_match(inputs))
-    }
-
     fn types() -> PossibleInputs<'static> {
         use once_cell::sync::Lazy;
         static GROUPS: Lazy<Vec<InputGroup>> = Lazy::new(|| {
@@ -116,10 +99,6 @@ impl FromAny for RatioNodeInput {
 pub struct RatioNode;
 
 impl NodeInput for RatioNode {
-    fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
-        RatioNodeInput::can_match(inputs)
-    }
-
     fn inputs(&self) -> PossibleInputs {
         RatioNodeInput::types()
     }

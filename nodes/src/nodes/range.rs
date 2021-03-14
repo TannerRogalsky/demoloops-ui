@@ -1,8 +1,7 @@
 use crate::{
-    FromAny, InputGroup, InputInfo, InputMatchError, Many, Node, NodeInput, NodeOutput, One,
-    PossibleInputs,
+    FromAny, InputGroup, InputInfo, Many, Node, NodeInput, NodeOutput, One, PossibleInputs,
 };
-use std::any::{Any, TypeId};
+use std::any::Any;
 
 #[derive(Copy, Clone)]
 struct RangeNodeInput {
@@ -10,21 +9,6 @@ struct RangeNodeInput {
 }
 
 impl RangeNodeInput {
-    fn can_match(inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
-        if inputs.len() == 1 {
-            if inputs[0].is::<One<u32>>() {
-                None
-            } else {
-                Some(InputMatchError::TypeMismatch {
-                    index: 0,
-                    type_id: TypeId::of::<One<u32>>(),
-                })
-            }
-        } else {
-            Some(InputMatchError::LengthMismatch { desired: 1 })
-        }
-    }
-
     fn op(self) -> Box<dyn Any> {
         Box::new(Many::from(0..self.length.inner()))
     }
@@ -65,10 +49,6 @@ impl FromAny for RangeNodeInput {
 pub struct RangeNode;
 
 impl NodeInput for RangeNode {
-    fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
-        RangeNodeInput::can_match(inputs)
-    }
-
     fn inputs(&self) -> PossibleInputs {
         RangeNodeInput::types()
     }
@@ -94,15 +74,6 @@ struct Range2DNodeInput {
 }
 
 impl Range2DNodeInput {
-    fn can_match(inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
-        if inputs.len() == 2 {
-            RangeNodeInput::can_match(&inputs[..1])
-                .or_else(|| RangeNodeInput::can_match(&inputs[1..]))
-        } else {
-            Some(InputMatchError::LengthMismatch { desired: 2 })
-        }
-    }
-
     fn op(self) -> Box<dyn Any> {
         let y = self.y.length.inner();
         let iter = (0..self.x.length.inner()).flat_map(move |vx| (0..y).map(move |vy| vy + vx * y));
@@ -155,10 +126,6 @@ impl FromAny for Range2DNodeInput {
 pub struct Range2DNode;
 
 impl NodeInput for Range2DNode {
-    fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
-        Range2DNodeInput::can_match(inputs)
-    }
-
     fn inputs(&self) -> PossibleInputs {
         Range2DNodeInput::types()
     }

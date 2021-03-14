@@ -1,8 +1,6 @@
-use nodes::{
-    InputGroup, InputInfo, InputMatchError, Many, Node, NodeInput, NodeOutput, One, PossibleInputs,
-};
+use nodes::{InputGroup, InputInfo, Many, Node, NodeInput, NodeOutput, One, PossibleInputs};
 use solstice_2d::Rectangle;
-use std::any::{Any, TypeId};
+use std::any::Any;
 
 struct RectangleInput<X, Y, W, H> {
     x: X,
@@ -55,44 +53,6 @@ where
     }
 }
 
-impl<A, B, C, D> RectangleInput<A, B, C, D>
-where
-    A: 'static,
-    B: 'static,
-    C: 'static,
-    D: 'static,
-{
-    fn can_match(inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
-        if inputs.len() == 4 {
-            if !inputs[0].is::<A>() {
-                Some(InputMatchError::TypeMismatch {
-                    index: 0,
-                    type_id: TypeId::of::<A>(),
-                })
-            } else if !inputs[1].is::<B>() {
-                Some(InputMatchError::TypeMismatch {
-                    index: 1,
-                    type_id: TypeId::of::<B>(),
-                })
-            } else if !inputs[2].is::<C>() {
-                Some(InputMatchError::TypeMismatch {
-                    index: 2,
-                    type_id: TypeId::of::<C>(),
-                })
-            } else if !inputs[3].is::<D>() {
-                Some(InputMatchError::TypeMismatch {
-                    index: 3,
-                    type_id: TypeId::of::<D>(),
-                })
-            } else {
-                None
-            }
-        } else {
-            Some(InputMatchError::LengthMismatch { desired: 4 })
-        }
-    }
-}
-
 macro_rules! rect_types {
     ($x: ty, $y: ty, $w: ty, $h: ty) => {
         impl RectangleInput<$x, $y, $w, $h> {
@@ -139,15 +99,6 @@ enum RectangleNodeInput {
 }
 
 impl RectangleNodeInput {
-    fn can_match(inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
-        RectangleInput::<One<f32>, One<f32>, One<f32>, One<f32>>::can_match(inputs)
-            .or_else(|| {
-                RectangleInput::<Many<f32>, One<f32>, One<f32>, One<f32>>::can_match(inputs)
-            })
-            .or_else(|| {
-                RectangleInput::<Many<f32>, Many<f32>, Many<f32>, Many<f32>>::can_match(inputs)
-            })
-    }
     fn types() -> PossibleInputs<'static> {
         use once_cell::sync::Lazy;
         static GROUPS: Lazy<Vec<InputGroup>> = Lazy::new(|| {
@@ -223,10 +174,6 @@ impl RectangleNodeInput {
 pub struct RectangleNode;
 
 impl NodeInput for RectangleNode {
-    fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
-        RectangleNodeInput::can_match(inputs)
-    }
-
     fn inputs(&self) -> PossibleInputs<'static> {
         RectangleNodeInput::types()
     }

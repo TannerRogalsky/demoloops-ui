@@ -5,7 +5,7 @@ mod nodes;
 pub use self::nodes::*;
 use serde::{Deserialize, Serialize};
 use slotmap::SlotMap;
-use std::any::{Any, TypeId};
+use std::any::Any;
 
 #[derive(Debug, Copy, Clone, Default, Ord, PartialOrd, Eq, PartialEq)]
 pub struct One<T>(T);
@@ -144,46 +144,6 @@ pair_impl!(One<u32>, One<u32>);
 pair_impl!(One<u32>, Many<u32>);
 pair_impl!(Many<u32>, Many<u32>);
 
-#[derive(Debug, Copy, Clone)]
-pub enum InputMatchError {
-    LengthMismatch { desired: usize },
-    TypeMismatch { index: usize, type_id: TypeId },
-}
-
-impl std::fmt::Display for InputMatchError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl std::error::Error for InputMatchError {}
-
-impl<A, B> Pair<A, B>
-where
-    A: 'static,
-    B: 'static,
-{
-    fn can_match(inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
-        if inputs.len() == 2 {
-            if !inputs[0].is::<A>() {
-                Some(InputMatchError::TypeMismatch {
-                    index: 0,
-                    type_id: TypeId::of::<A>(),
-                })
-            } else if !inputs[1].is::<B>() {
-                Some(InputMatchError::TypeMismatch {
-                    index: 1,
-                    type_id: TypeId::of::<B>(),
-                })
-            } else {
-                None
-            }
-        } else {
-            Some(InputMatchError::LengthMismatch { desired: 2 })
-        }
-    }
-}
-
 impl<A, B> FromAny for Pair<A, B>
 where
     A: 'static,
@@ -269,7 +229,17 @@ impl InputGroup<'_> {
 }
 
 pub trait NodeInput {
-    fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> Option<InputMatchError>;
+    // fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> Option<InputMatchError>;
+    fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> bool {
+        self.inputs().groups.iter().any(|group| {
+            group.info.len() == inputs.len()
+                && group
+                    .info
+                    .iter()
+                    .zip(inputs.iter())
+                    .all(|(info, input)| info.type_id == (**input).type_id())
+        })
+    }
     fn is_terminator(&self) -> bool {
         false
     }
@@ -448,7 +418,7 @@ mod tests {
             let mut buffer: Vec<Box<dyn Any>> = Vec::new();
             buffer.push(Box::new(One(2u32)));
             buffer.push(Box::new(Into::<Many<u32>>::into(vec![2u32, 3, 4])));
-            assert!(MultiplyNode.inputs_match(&buffer).is_none());
+            assert!(MultiplyNode.inputs_match(&buffer));
 
             let output = MultiplyNode.op(&mut buffer).unwrap();
             assert!(buffer.is_empty());
@@ -464,7 +434,7 @@ mod tests {
             let mut buffer: Vec<Box<dyn Any>> = Vec::new();
             buffer.push(Box::new(One(3u32)));
             buffer.push(Box::new(Into::<Many<u32>>::into(0u32..3)));
-            assert!(RatioNode.inputs_match(&buffer).is_none());
+            assert!(RatioNode.inputs_match(&buffer));
 
             let output = RatioNode.op(&mut buffer).unwrap();
             assert!(buffer.is_empty());

@@ -1,7 +1,4 @@
-use crate::{
-    FromAny, InputGroup, InputMatchError, Many, Node, NodeInput, NodeOutput, One, Pair,
-    PossibleInputs,
-};
+use crate::{FromAny, InputGroup, Many, Node, NodeInput, NodeOutput, One, Pair, PossibleInputs};
 use std::any::Any;
 
 #[derive(Debug, Clone)]
@@ -40,17 +37,6 @@ where
     }
 }
 
-impl<T> MultiplyGroup<T>
-where
-    T: 'static,
-{
-    fn can_match(inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
-        Pair::<One<T>, One<T>>::can_match(inputs)
-            .or_else(|| Pair::<One<T>, Many<T>>::can_match(inputs))
-            .or_else(|| Pair::<Many<T>, Many<T>>::can_match(inputs))
-    }
-}
-
 impl<T> FromAny for MultiplyGroup<T>
 where
     T: 'static,
@@ -80,10 +66,6 @@ impl MultiplyNodeInput {
             MultiplyNodeInput::F32(group) => group.op(),
             MultiplyNodeInput::U32(group) => group.op(),
         }
-    }
-
-    fn can_match(inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
-        MultiplyGroup::<f32>::can_match(inputs).or_else(|| MultiplyGroup::<u32>::can_match(inputs))
     }
 
     fn types() -> PossibleInputs<'static> {
@@ -127,10 +109,6 @@ impl FromAny for MultiplyNodeInput {
 pub struct MultiplyNode;
 
 impl NodeInput for MultiplyNode {
-    fn inputs_match(&self, inputs: &[Box<dyn Any>]) -> Option<InputMatchError> {
-        MultiplyNodeInput::can_match(inputs)
-    }
-
     fn inputs(&self) -> PossibleInputs {
         MultiplyNodeInput::types()
     }
