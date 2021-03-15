@@ -1,8 +1,9 @@
 mod nodes;
 
 pub use self::nodes::*;
-use ::nodes::{Graph, NodeID};
+use ::nodes::{ConnectionState, Graph, NodeID};
 use solstice_2d::{Color, Draw, FontId, LineVertex, Rectangle};
+use std::any::Any;
 
 #[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Position {
@@ -121,6 +122,10 @@ impl UIGraph {
             metadata,
             font,
         }
+    }
+
+    pub fn execute(&mut self) -> Result<Box<dyn Any>, ::nodes::Error> {
+        self.inner.execute()
     }
 
     pub fn inner(&self) -> &Graph {
@@ -243,10 +248,18 @@ impl UIGraph {
                         y: rect.y + rect.height / 2.,
                     }
                 };
-                let points = std::array::IntoIter::new([from_pos, to_pos]).map(|p| LineVertex {
+
+                let color = match connection.state {
+                    ConnectionState::Valid => [0., 1., 0., 1.],
+                    ConnectionState::Invalid => [1., 0., 0., 1.],
+                    ConnectionState::Unevaluated => [1., 1., 1., 1.],
+                };
+
+                let points = std::array::IntoIter::new([from_pos, to_pos]);
+                let points = points.map(move |p| LineVertex {
                     position: [p.x, p.y, 0.],
                     width: 5.0,
-                    ..LineVertex::default()
+                    color,
                 });
                 g.line_2d(points);
             }

@@ -1,5 +1,3 @@
-#![feature(type_name_of_val)]
-
 mod nodes;
 
 pub use self::nodes::*;
@@ -296,11 +294,26 @@ slotmap::new_key_type! {
     pub struct InputID;
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum ConnectionState {
+    Valid,
+    Invalid,
+    Unevaluated,
+}
+
+impl Default for ConnectionState {
+    fn default() -> Self {
+        Self::Unevaluated
+    }
+}
+
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Connection {
     pub from: NodeID,
     pub to: NodeID,
     pub input: usize,
+    #[serde(skip)]
+    pub state: ConnectionState,
 }
 
 impl Connection {
@@ -312,7 +325,7 @@ impl Connection {
 #[derive(Debug)]
 pub struct Error {
     pub executing_node: NodeID,
-    pub input: Vec<Box<dyn Any>>,
+    pub inputs: Vec<Box<dyn Any>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -357,39 +370,79 @@ impl Graph {
     }
 
     pub fn connect(&mut self, from: NodeID, to: NodeID, input: usize) {
-        self.connections.push(Connection { from, to, input })
+        self.connections.push(Connection {
+            from,
+            to,
+            input,
+            state: ConnectionState::Unevaluated,
+        })
     }
 
-    pub fn execute(&self) -> Result<Box<dyn Any>, Error> {
+    pub fn execute(&mut self) -> Result<Box<dyn Any>, Error> {
+        for connection in self.connections.iter_mut() {
+            connection.state = ConnectionState::Unevaluated;
+        }
         self.execute_node(self.root)
     }
 
-    fn execute_node(&self, node_id: NodeID) -> Result<Box<dyn Any>, Error> {
-        let to = self.nodes.get(node_id).unwrap();
+    fn execute_node(&mut self, node_id: NodeID) -> Result<Box<dyn Any>, Error> {
         let mut connections = self
             .connections
             .iter()
             .filter(|connection| connection.to == node_id)
+            .cloned()
             .collect::<Vec<_>>();
         connections.sort_unstable_by(|a, b| a.input.cmp(&b.input));
-        let mut input = connections
+        let mut inputs = connections
             .into_iter()
             .map(|connection| {
-                let input = self.nodes.get(connection.from).unwrap();
-                if input.is_terminator() {
-                    let mut buf = vec![];
-                    input.op(&mut buf).map_err(|_| Error {
+                let from = self.nodes.get(connection.from).unwrap();
+                if from.is_terminator() {
+                    let mut inputs = vec![];
+                    from.op(&mut inputs).map_err(|_| Error {
                         executing_node: connection.from,
-                        input: buf,
+                        inputs,
                     })
                 } else {
                     self.execute_node(connection.from)
                 }
             })
             .collect::<Result<Vec<Box<dyn Any>>, Error>>()?;
-        to.op(&mut input).map_err(|_| Error {
+        let to = self.nodes.get(node_id).unwrap();
+        let result = to.op(&mut inputs);
+
+        let mut connections = self
+            .connections
+            .iter_mut()
+            .filter(|connection| connection.to == node_id)
+            .collect::<Vec<_>>();
+        connections.sort_unstable_by(|a, b| a.input.cmp(&b.input));
+        if result.is_ok() {
+            for connection in connections {
+                connection.state = ConnectionState::Valid;
+            }
+        } else {
+            let possible_inputs = to.inputs();
+            if let Some(best_match) = possible_inputs.best_match(&inputs) {
+                let iter = best_match.info.iter().zip(inputs.iter()).zip(connections);
+                for ((info, input), connection) in iter {
+                    let input = &**input;
+                    let state = if info.type_id == input.type_id() {
+                        ConnectionState::Valid
+                    } else {
+                        ConnectionState::Invalid
+                    };
+                    connection.state = state;
+                }
+            } else {
+                for connection in connections {
+                    connection.state = ConnectionState::Invalid;
+                }
+            }
+        }
+        result.map_err(|_| Error {
             executing_node: node_id,
-            input,
+            inputs,
         })
     }
 }
