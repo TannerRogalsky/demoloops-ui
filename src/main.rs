@@ -4,7 +4,7 @@ use crate::window::winit::event::{ElementState, MouseButton};
 use demoloops_ui::*;
 use glutin::dpi::PhysicalPosition;
 use nodes::*;
-use solstice_2d::{solstice, DrawList};
+use solstice_2d::{solstice, Draw, DrawList};
 
 fn main() {
     let (width, height) = (1920., 1080.);
@@ -164,7 +164,14 @@ fn main() {
                         16.,
                         solstice_2d::Rectangle::new(width / 2., 0., width / 2., 50.),
                     );
-                    graph.render(g);
+                    graph.render(&mut g);
+                    ui_state.render(
+                        &mut g,
+                        UIContext {
+                            mouse_position,
+                            graph: &mut graph,
+                        },
+                    );
                 }
 
                 window.swap_buffers().expect("terrible, terrible damage");
@@ -173,6 +180,19 @@ fn main() {
         }
     });
 }
+
+const POSSIBLE_NODES: once_cell::sync::Lazy<Vec<Box<dyn Node>>> =
+    once_cell::sync::Lazy::new(|| {
+        vec![
+            Box::new(::nodes::ConstantNode::Unsigned(0)),
+            Box::new(::nodes::MultiplyNode),
+            Box::new(::nodes::RangeNode),
+            Box::new(::nodes::Range2DNode),
+            Box::new(::nodes::RatioNode),
+            Box::new(RectangleNode),
+            Box::new(DrawNode),
+        ]
+    });
 
 #[derive(Debug, Copy, Clone)]
 enum Action {
@@ -188,6 +208,32 @@ struct ActionContext {
 #[derive(Debug, Copy, Clone)]
 struct NewNodeContext {
     origin: PhysicalPosition<f64>,
+}
+
+impl NewNodeContext {
+    pub const ELEMENT_HEIGHT: f32 = 24.;
+
+    pub fn bounds(&self) -> solstice_2d::Rectangle {
+        let ox = self.origin.x as f32;
+        let oy = self.origin.y as f32;
+        solstice_2d::Rectangle::new(
+            ox,
+            oy,
+            100.,
+            POSSIBLE_NODES.len() as f32 * Self::ELEMENT_HEIGHT,
+        )
+    }
+
+    pub fn item_bounds(&self, index: usize) -> solstice_2d::Rectangle {
+        let ox = self.origin.x as f32;
+        let oy = self.origin.y as f32;
+        solstice_2d::Rectangle::new(
+            ox,
+            oy + index as f32 * Self::ELEMENT_HEIGHT,
+            100.,
+            Self::ELEMENT_HEIGHT,
+        )
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -216,6 +262,31 @@ enum UIState {
 }
 
 impl UIState {
+    pub fn render(&self, g: &mut solstice_2d::GraphicsLock, context: UIContext) {
+        match self {
+            UIState::None => {}
+            UIState::NodeAction(ctx) => {
+                if let Some(metadata) = context.graph.metadata().get(ctx.node_id) {
+                    let bounds: solstice_2d::Rectangle = metadata.into();
+                    g.stroke_with_color(bounds, solstice_2d::Color::new(1., 0., 1., 0.5));
+                }
+            }
+            UIState::NewNode(ctx) => {
+                let bounds = ctx.bounds();
+                g.draw_with_color(bounds, [0.3, 0.3, 0.3, 1.]);
+                let mx = context.mouse_position.x as f32;
+                let my = context.mouse_position.y as f32;
+                for (index, node) in POSSIBLE_NODES.iter().enumerate() {
+                    let bounds = ctx.item_bounds(index);
+                    g.print(node.name(), solstice_2d::FontId::default(), 16., bounds);
+                    if rect_contains(&bounds, mx, my) {
+                        g.stroke_with_color(bounds, [1., 1., 0., 0.75]);
+                    }
+                }
+            }
+        }
+    }
+
     pub fn handle_event(self, event: UIEvent, context: UIContext) -> Self {
         let UIContext {
             mouse_position,
@@ -351,7 +422,40 @@ impl UIState {
                     self
                 }
             },
-            UIState::NewNode(_) => self,
+            UIState::NewNode(ctx) => match event {
+                UIEvent::KeyboardInput { .. } => self,
+                UIEvent::MouseMoved(_) => self,
+                UIEvent::MouseInput { state, button } => match (state, button) {
+                    (ElementState::Pressed, MouseButton::Left) => {
+                        let bounds = ctx.bounds();
+                        let mx = mouse_position.x as f32;
+                        let my = mouse_position.y as f32;
+                        if rect_contains(&bounds, mx, my) {
+                            let clicked =
+                                POSSIBLE_NODES.iter().enumerate().find_map(|(index, node)| {
+                                    let bounds = ctx.item_bounds(index);
+                                    if rect_contains(&bounds, mx, my) {
+                                        Some(node.clone())
+                                    } else {
+                                        None
+                                    }
+                                });
+                            if let Some(node) = clicked {
+                                let x = ctx.origin.x as f32;
+                                let y = ctx.origin.y as f32;
+                                graph.add_boxed_node(node, x, y);
+                            }
+                        }
+                        UIState::None
+                    }
+                    (ElementState::Pressed, MouseButton::Right) => {
+                        UIState::NewNode(NewNodeContext {
+                            origin: mouse_position,
+                        })
+                    }
+                    _ => self,
+                },
+            },
         }
     }
 }

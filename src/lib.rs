@@ -152,7 +152,11 @@ impl UIGraph {
     where
         N: ::nodes::Node + 'static,
     {
-        let id = self.inner.add_node(node);
+        self.add_boxed_node(Box::new(node), x, y)
+    }
+
+    pub fn add_boxed_node(&mut self, node: Box<dyn ::nodes::Node>, x: f32, y: f32) -> NodeID {
+        let id = self.inner.add_boxed_node(node);
         self.metadata.insert(
             id,
             Metadata {
@@ -170,7 +174,7 @@ impl UIGraph {
         self.inner.connect(from, to, input)
     }
 
-    pub fn render(&self, mut g: solstice_2d::GraphicsLock) {
+    pub fn render(&self, g: &mut solstice_2d::GraphicsLock) {
         let black = Color::new(0., 0., 0., 1.);
         for (id, metadata) in self.metadata.iter() {
             if let Some(node) = self.inner.nodes().get(id) {

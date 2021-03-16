@@ -366,7 +366,11 @@ impl Graph {
     where
         N: Node + 'static,
     {
-        self.nodes.insert(Box::new(node))
+        self.add_boxed_node(Box::new(node))
+    }
+
+    pub fn add_boxed_node(&mut self, node: Box<dyn Node>) -> NodeID {
+        self.nodes.insert(node)
     }
 
     pub fn connect(&mut self, from: NodeID, to: NodeID, input: usize) {
