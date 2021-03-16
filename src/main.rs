@@ -1,5 +1,6 @@
 mod window;
 
+use crate::window::winit::event::{ElementState, MouseButton};
 use demoloops_ui::*;
 use glutin::dpi::PhysicalPosition;
 use nodes::*;
@@ -59,38 +60,14 @@ fn main() {
             })
     };
 
-    enum ClickState {
-        Down(PhysicalPosition<f64>),
-        Up,
-    }
-    struct MouseState {
-        position: PhysicalPosition<f64>,
-        left: ClickState,
-    }
-    let mut mouse_state = MouseState {
-        position: PhysicalPosition::new(0., 0.),
-        left: ClickState::Up,
-    };
-
-    #[derive(Debug, Copy, Clone)]
-    enum Action {
-        Move,
-        Resize,
-        Edit,
-    }
-    #[derive(Debug, Copy, Clone)]
-    struct ActionContext {
-        node_id: NodeID,
-        action: Action,
-    }
-    let mut action_context: Option<ActionContext> = None;
+    let mut ui_state = UIState::None;
+    let mut mouse_position = PhysicalPosition::new(0., 0.);
 
     let mut show_graph = true;
     let mut times = std::collections::VecDeque::with_capacity(60);
 
     event_loop.run(move |event, _target, control_flow| {
         use glutin::{event::*, event_loop::*};
-
         match event {
             Event::WindowEvent { window_id, event } => {
                 if window_id == window.id() {
@@ -103,123 +80,45 @@ fn main() {
                         WindowEvent::KeyboardInput {
                             input:
                                 KeyboardInput {
-                                    state: ElementState::Pressed,
-                                    virtual_keycode: Some(keycode),
+                                    state,
+                                    virtual_keycode: Some(key_code),
                                     ..
                                 },
                             ..
                         } => {
-                            if let Some(ActionContext { node_id, action }) = action_context {
-                                if let Action::Edit = action {
-                                    if let Some(node) = graph
-                                        .node_mut(node_id)
-                                        .and_then(|n| n.downcast_mut::<ConstantNode>())
-                                    {
-                                        let new_char = match keycode {
-                                            VirtualKeyCode::Key1 => Some('1'),
-                                            VirtualKeyCode::Key2 => Some('2'),
-                                            VirtualKeyCode::Key3 => Some('3'),
-                                            VirtualKeyCode::Key4 => Some('4'),
-                                            VirtualKeyCode::Key5 => Some('5'),
-                                            VirtualKeyCode::Key6 => Some('6'),
-                                            VirtualKeyCode::Key7 => Some('7'),
-                                            VirtualKeyCode::Key8 => Some('8'),
-                                            VirtualKeyCode::Key9 => Some('9'),
-                                            VirtualKeyCode::Key0 => Some('0'),
-                                            VirtualKeyCode::Period => Some('.'),
-                                            VirtualKeyCode::Return => {
-                                                action_context = None;
-                                                None
-                                            }
-                                            _ => None,
-                                        };
-                                        if let Some(new_char) = new_char {
-                                            let mut current = match node {
-                                                ConstantNode::Unsigned(v) => v.to_string(),
-                                                ConstantNode::Float(v) => v.to_string(),
-                                            };
-                                            current.push(new_char);
-                                            if let Ok(v) = current.parse::<u32>() {
-                                                *node = ConstantNode::Unsigned(v);
-                                            } else if let Ok(v) = current.parse::<f32>() {
-                                                *node = ConstantNode::Float(v);
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
-                                match keycode {
+                            ui_state = ui_state.handle_event(
+                                UIEvent::KeyboardInput { state, key_code },
+                                UIContext {
+                                    mouse_position,
+                                    graph: &mut graph,
+                                },
+                            );
+                            if state == ElementState::Pressed {
+                                match key_code {
                                     VirtualKeyCode::Escape => *control_flow = ControlFlow::Exit,
                                     VirtualKeyCode::Grave => show_graph = !show_graph,
                                     _ => (),
                                 }
                             }
                         }
-                        WindowEvent::MouseInput { state, button, .. } => match button {
-                            MouseButton::Left => match state {
-                                ElementState::Pressed => {
-                                    mouse_state.left = ClickState::Down(mouse_state.position);
-                                    let x = mouse_state.position.x as f32;
-                                    let y = mouse_state.position.y as f32;
-                                    let selected = graph
-                                        .metadata()
-                                        .iter()
-                                        .find(|(_id, metadata)| metadata.contains(x, y));
-                                    if let Some((node_id, metadata)) = selected {
-                                        if rect_contains(&metadata.top_bar(), x, y) {
-                                            action_context = Some(ActionContext {
-                                                node_id,
-                                                action: Action::Move,
-                                            })
-                                        } else if rect_contains(&metadata.resize(), x, y) {
-                                            action_context = Some(ActionContext {
-                                                node_id,
-                                                action: Action::Resize,
-                                            })
-                                        } else if let Some(node) = graph
-                                            .node_mut(node_id)
-                                            .and_then(|n| n.downcast_mut::<ConstantNode>())
-                                        {
-                                            *node = ConstantNode::Unsigned(0);
-                                            action_context = Some(ActionContext {
-                                                node_id,
-                                                action: Action::Edit,
-                                            });
-                                        }
-                                    }
-                                }
-                                ElementState::Released => {
-                                    mouse_state.left = ClickState::Up;
-                                    if let Some(Action::Edit) = action_context.map(|ctx| ctx.action)
-                                    {
-                                    } else {
-                                        action_context = None;
-                                    }
-                                }
-                            },
-                            _ => {}
-                        },
+                        WindowEvent::MouseInput { state, button, .. } => {
+                            ui_state = ui_state.handle_event(
+                                UIEvent::MouseInput { state, button },
+                                UIContext {
+                                    mouse_position,
+                                    graph: &mut graph,
+                                },
+                            )
+                        }
                         WindowEvent::CursorMoved { position, .. } => {
-                            let delta_x = position.x - mouse_state.position.x;
-                            let delta_y = position.y - mouse_state.position.y;
-                            mouse_state.position = position;
-                            if let Some(ActionContext { node_id, action }) = action_context {
-                                match action {
-                                    Action::Move => {
-                                        if let Some(selected) = graph.metadata_mut(node_id) {
-                                            selected.position.x += delta_x as f32;
-                                            selected.position.y += delta_y as f32;
-                                        }
-                                    }
-                                    Action::Resize => {
-                                        if let Some(selected) = graph.metadata_mut(node_id) {
-                                            selected.dimensions.width += delta_x as f32;
-                                            selected.dimensions.height += delta_y as f32;
-                                        }
-                                    }
-                                    Action::Edit => {}
-                                }
-                            }
+                            ui_state = ui_state.handle_event(
+                                UIEvent::MouseMoved(position),
+                                UIContext {
+                                    mouse_position,
+                                    graph: &mut graph,
+                                },
+                            );
+                            mouse_position = position;
                         }
                         _ => {}
                     }
@@ -273,4 +172,186 @@ fn main() {
             _ => {}
         }
     });
+}
+
+#[derive(Debug, Copy, Clone)]
+enum Action {
+    Move,
+    Resize,
+    Edit,
+}
+#[derive(Debug, Copy, Clone)]
+struct ActionContext {
+    node_id: NodeID,
+    action: Action,
+}
+#[derive(Debug, Copy, Clone)]
+struct NewNodeContext {
+    origin: PhysicalPosition<f64>,
+}
+
+#[derive(Debug, Copy, Clone)]
+enum UIEvent {
+    KeyboardInput {
+        state: glutin::event::ElementState,
+        key_code: glutin::event::VirtualKeyCode,
+    },
+    MouseInput {
+        state: glutin::event::ElementState,
+        button: glutin::event::MouseButton,
+    },
+    MouseMoved(PhysicalPosition<f64>),
+}
+
+struct UIContext<'a> {
+    mouse_position: PhysicalPosition<f64>,
+    graph: &'a mut UIGraph,
+}
+
+#[derive(Copy, Clone, Debug)]
+enum UIState {
+    None,
+    NodeAction(ActionContext),
+    NewNode(NewNodeContext),
+}
+
+impl UIState {
+    pub fn handle_event(self, event: UIEvent, context: UIContext) -> Self {
+        let UIContext {
+            mouse_position,
+            graph,
+        } = context;
+        match self {
+            UIState::None => match event {
+                UIEvent::KeyboardInput { .. } => self,
+                UIEvent::MouseInput { state, button } => match state {
+                    ElementState::Pressed => {
+                        let x = mouse_position.x as f32;
+                        let y = mouse_position.y as f32;
+                        let clicked = graph
+                            .metadata()
+                            .iter()
+                            .find(|(_id, metadata)| metadata.contains(x, y));
+                        match button {
+                            MouseButton::Left => {
+                                if let Some((node_id, metadata)) = clicked {
+                                    if rect_contains(&metadata.top_bar(), x, y) {
+                                        Self::NodeAction(ActionContext {
+                                            node_id,
+                                            action: Action::Move,
+                                        })
+                                    } else if rect_contains(&metadata.resize(), x, y) {
+                                        Self::NodeAction(ActionContext {
+                                            node_id,
+                                            action: Action::Resize,
+                                        })
+                                    } else if let Some(node) = graph
+                                        .node_mut(node_id)
+                                        .and_then(|n| n.downcast_mut::<ConstantNode>())
+                                    {
+                                        *node = ConstantNode::Unsigned(0);
+                                        Self::NodeAction(ActionContext {
+                                            node_id,
+                                            action: Action::Edit,
+                                        })
+                                    } else {
+                                        self
+                                    }
+                                } else {
+                                    self
+                                }
+                            }
+                            MouseButton::Right => {
+                                if clicked.is_none() {
+                                    Self::NewNode(NewNodeContext {
+                                        origin: mouse_position,
+                                    })
+                                } else {
+                                    self
+                                }
+                            }
+                            _ => self,
+                        }
+                    }
+                    ElementState::Released => self,
+                },
+                UIEvent::MouseMoved(_) => self,
+            },
+            UIState::NodeAction(action) => match event {
+                UIEvent::KeyboardInput { state, key_code } => {
+                    match action.action {
+                        Action::Edit => match state {
+                            ElementState::Pressed => {
+                                use glutin::event::VirtualKeyCode;
+                                let new_char = match key_code {
+                                    VirtualKeyCode::Key1 => Some('1'),
+                                    VirtualKeyCode::Key2 => Some('2'),
+                                    VirtualKeyCode::Key3 => Some('3'),
+                                    VirtualKeyCode::Key4 => Some('4'),
+                                    VirtualKeyCode::Key5 => Some('5'),
+                                    VirtualKeyCode::Key6 => Some('6'),
+                                    VirtualKeyCode::Key7 => Some('7'),
+                                    VirtualKeyCode::Key8 => Some('8'),
+                                    VirtualKeyCode::Key9 => Some('9'),
+                                    VirtualKeyCode::Key0 => Some('0'),
+                                    VirtualKeyCode::Period => Some('.'),
+                                    VirtualKeyCode::Return | VirtualKeyCode::Escape => {
+                                        return UIState::None;
+                                    }
+                                    _ => return self,
+                                };
+                                let node = graph
+                                    .node_mut(action.node_id)
+                                    .and_then(|n| n.downcast_mut::<ConstantNode>());
+                                if let (Some(new_char), Some(node)) = (new_char, node) {
+                                    let mut current = match node {
+                                        ConstantNode::Unsigned(v) => v.to_string(),
+                                        ConstantNode::Float(v) => v.to_string(),
+                                    };
+                                    current.push(new_char);
+                                    if let Ok(v) = current.parse::<u32>() {
+                                        *node = ConstantNode::Unsigned(v);
+                                    } else if let Ok(v) = current.parse::<f32>() {
+                                        *node = ConstantNode::Float(v);
+                                    }
+                                }
+                            }
+                            ElementState::Released => {}
+                        },
+                        _ => {}
+                    }
+                    self
+                }
+                UIEvent::MouseInput { state, .. } => match state {
+                    ElementState::Pressed => self,
+                    ElementState::Released => match action.action {
+                        Action::Move | Action::Resize => UIState::None,
+                        Action::Edit => self,
+                    },
+                },
+                UIEvent::MouseMoved(position) => {
+                    let delta_x = position.x - mouse_position.x;
+                    let delta_y = position.y - mouse_position.y;
+                    let node_id = action.node_id;
+                    match action.action {
+                        Action::Move => {
+                            if let Some(selected) = graph.metadata_mut(node_id) {
+                                selected.position.x += delta_x as f32;
+                                selected.position.y += delta_y as f32;
+                            }
+                        }
+                        Action::Resize => {
+                            if let Some(selected) = graph.metadata_mut(node_id) {
+                                selected.dimensions.width += delta_x as f32;
+                                selected.dimensions.height += delta_y as f32;
+                            }
+                        }
+                        Action::Edit => {}
+                    }
+                    self
+                }
+            },
+            UIState::NewNode(_) => self,
+        }
+    }
 }
