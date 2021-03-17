@@ -5,16 +5,18 @@ use std::any::Any;
 enum MultiplyGroup<T> {
     OneOne(Pair<One<T>, One<T>>),
     OneMany(Pair<One<T>, Many<T>>),
+    ManyOne(Pair<Many<T>, One<T>>),
     ManyMany(Pair<Many<T>, Many<T>>),
 }
 
 macro_rules! group_impl {
     ($t: ty) => {
         impl MultiplyGroup<$t> {
-            fn types() -> [InputGroup<'static>; 3] {
+            fn types() -> [InputGroup<'static>; 4] {
                 [
                     Pair::<One<$t>, One<$t>>::types(),
                     Pair::<One<$t>, Many<$t>>::types(),
+                    Pair::<Many<$t>, One<$t>>::types(),
                     Pair::<Many<$t>, Many<$t>>::types(),
                 ]
             }
@@ -32,6 +34,7 @@ where
         match self {
             MultiplyGroup::OneOne(Pair { lhs, rhs }) => Box::new(lhs * rhs),
             MultiplyGroup::OneMany(Pair { lhs, rhs }) => Box::new(lhs * rhs),
+            MultiplyGroup::ManyOne(Pair { lhs, rhs }) => Box::new(lhs * rhs),
             MultiplyGroup::ManyMany(Pair { lhs, rhs }) => Box::new(lhs * rhs),
         }
     }
@@ -48,6 +51,8 @@ where
             Ok(MultiplyGroup::OneMany(one_many))
         } else if let Ok(many_many) = Pair::<Many<T>, Many<T>>::from_any(inputs) {
             Ok(MultiplyGroup::ManyMany(many_many))
+        } else if let Ok(many_one) = Pair::<Many<T>, One<T>>::from_any(inputs) {
+            Ok(MultiplyGroup::ManyOne(many_one))
         } else {
             Err(())
         }
@@ -74,14 +79,10 @@ impl MultiplyNodeInput {
             static GROUPS: Lazy<Vec<InputGroup>> = Lazy::new(|| {
                 let float = MultiplyGroup::<f32>::types();
                 let unsigned = MultiplyGroup::<u32>::types();
-                vec![
-                    float[0],
-                    float[1],
-                    float[2],
-                    unsigned[0],
-                    unsigned[1],
-                    unsigned[2],
-                ]
+                let mut acc = Vec::new();
+                acc.extend_from_slice(&float);
+                acc.extend_from_slice(&unsigned);
+                acc
             });
 
             PossibleInputs { groups: &*GROUPS }

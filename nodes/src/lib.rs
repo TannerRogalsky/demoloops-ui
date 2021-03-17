@@ -98,6 +98,17 @@ where
         Many(Box::new(self.0.zip(rhs.0).map(|(lhs, rhs)| lhs * rhs)))
     }
 }
+impl<T> std::ops::Mul<One<T>> for Many<T>
+where
+    T: std::ops::Mul<Output = T> + Copy + 'static,
+{
+    type Output = Many<T>;
+
+    fn mul(self, rhs: One<T>) -> Self::Output {
+        let rhs = rhs.0;
+        Many(Box::new(self.0.map(move |lhs| lhs * rhs)))
+    }
+}
 
 pub trait FromAny {
     fn from_any(inputs: &mut Vec<Box<dyn std::any::Any>>) -> Result<Self, ()>
@@ -137,9 +148,11 @@ macro_rules! pair_impl {
 
 pair_impl!(One<f32>, One<f32>);
 pair_impl!(One<f32>, Many<f32>);
+pair_impl!(Many<f32>, One<f32>);
 pair_impl!(Many<f32>, Many<f32>);
 pair_impl!(One<u32>, One<u32>);
 pair_impl!(One<u32>, Many<u32>);
+pair_impl!(Many<u32>, One<u32>);
 pair_impl!(Many<u32>, Many<u32>);
 
 impl<A, B> FromAny for Pair<A, B>
@@ -374,6 +387,9 @@ impl Graph {
     }
 
     pub fn connect(&mut self, from: NodeID, to: NodeID, input: usize) {
+        let not_same_input = |c: &Connection| c.to != to || c.input != input;
+        self.connections.retain(not_same_input);
+
         self.connections.push(Connection {
             from,
             to,
