@@ -17,7 +17,7 @@ pub struct Dimensions {
     pub height: f32,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Metadata {
     pub position: Position,
     pub dimensions: Dimensions,
@@ -29,6 +29,13 @@ pub fn rect_contains(rect: &Rectangle, x: f32, y: f32) -> bool {
     let x2 = x1 + rect.width;
     let y2 = y1 + rect.height;
     x > x1 && x < x2 && y > y1 && y < y2
+}
+
+pub fn rect_center(rect: &Rectangle) -> Position {
+    Position {
+        x: rect.x + rect.width / 2.,
+        y: rect.y + rect.height / 2.,
+    }
 }
 
 impl Metadata {
@@ -238,13 +245,7 @@ impl UIGraph {
             let to = self.metadata.get(connection.to);
             let from = self.metadata.get(connection.from);
             if let (Some(from), Some(to)) = (from, to) {
-                let from_pos = {
-                    let rect = from.output();
-                    Position {
-                        x: rect.x + rect.width / 2.,
-                        y: rect.y + rect.height / 2.,
-                    }
-                };
+                let from_pos = rect_center(&from.output());
                 let to_pos = {
                     let rect = to.input(connection.input);
                     Position {

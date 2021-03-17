@@ -10,6 +10,7 @@ fn main() {
     let (width, height) = (1920., 1080.);
     let event_loop = glutin::event_loop::EventLoop::new();
     let wb = glutin::window::WindowBuilder::new()
+        .with_title("Demoloops UI")
         .with_inner_size(glutin::dpi::PhysicalSize::new(width, height));
     let (ctx, window) = window::init_ctx(wb, &event_loop);
     let mut ctx = solstice::Context::new(ctx);
@@ -237,6 +238,11 @@ impl NewNodeContext {
 }
 
 #[derive(Debug, Copy, Clone)]
+struct NewConnectionContext {
+    from: NodeID,
+}
+
+#[derive(Debug, Copy, Clone)]
 enum UIEvent {
     KeyboardInput {
         state: glutin::event::ElementState,
@@ -259,6 +265,7 @@ enum UIState {
     None,
     NodeAction(ActionContext),
     NewNode(NewNodeContext),
+    NewConnection(NewConnectionContext),
 }
 
 impl UIState {
@@ -282,6 +289,22 @@ impl UIState {
                     if rect_contains(&bounds, mx, my) {
                         g.stroke_with_color(bounds, [1., 1., 0., 0.75]);
                     }
+                }
+            }
+            UIState::NewConnection(ctx) => {
+                if let Some(metadata) = context.graph.metadata().get(ctx.from) {
+                    let from = rect_center(&metadata.output());
+                    let to = Position {
+                        x: context.mouse_position.x as f32,
+                        y: context.mouse_position.y as f32,
+                    };
+                    g.line_2d(std::array::IntoIter::new([from, to]).map(|p| {
+                        solstice_2d::LineVertex {
+                            position: [p.x, p.y, 0.],
+                            width: 5.0,
+                            color: [1., 1., 1., 1.],
+                        }
+                    }))
                 }
             }
         }
@@ -316,6 +339,8 @@ impl UIState {
                                             node_id,
                                             action: Action::Resize,
                                         })
+                                    } else if rect_contains(&metadata.output(), x, y) {
+                                        Self::NewConnection(NewConnectionContext { from: node_id })
                                     } else if let Some(node) = graph
                                         .node_mut(node_id)
                                         .and_then(|n| n.downcast_mut::<ConstantNode>())
@@ -454,6 +479,53 @@ impl UIState {
                         })
                     }
                     _ => self,
+                },
+            },
+            UIState::NewConnection(ctx) => match event {
+                UIEvent::KeyboardInput { .. } => self,
+                UIEvent::MouseMoved(_) => self,
+                UIEvent::MouseInput { state, button } => match (state, button) {
+                    (ElementState::Released, MouseButton::Left) => {
+                        let mx = context.mouse_position.x as f32;
+                        let my = context.mouse_position.y as f32;
+                        let clicked = graph
+                            .metadata()
+                            .iter()
+                            .find(|(_id, metadata)| {
+                                let bounds: solstice_2d::Rectangle = (*metadata).into();
+                                rect_contains(&bounds, mx, my)
+                            })
+                            .and_then(|(id, metadata)| {
+                                graph
+                                    .inner()
+                                    .nodes()
+                                    .get(id)
+                                    .map(|node| (id, node, metadata))
+                            });
+                        if let Some((to, node, metadata)) = clicked {
+                            if let Some(most) = node
+                                .inputs()
+                                .groups
+                                .iter()
+                                .max_by(|a, b| a.info.len().cmp(&b.info.len()))
+                            {
+                                let input =
+                                    most.info.iter().enumerate().find_map(|(index, _info)| {
+                                        if rect_contains(&metadata.input(index), mx, my) {
+                                            Some(index)
+                                        } else {
+                                            None
+                                        }
+                                    });
+
+                                if let Some(input) = input {
+                                    graph.connect(ctx.from, to, input);
+                                }
+                            }
+                        }
+                        UIState::None
+                    }
+                    _ => UIState::None,
                 },
             },
         }
