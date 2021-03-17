@@ -91,11 +91,13 @@ macro_rules! rect_types {
 rect_types!(One<f32>, One<f32>, One<f32>, One<f32>);
 rect_types!(Many<f32>, One<f32>, One<f32>, One<f32>);
 rect_types!(Many<f32>, Many<f32>, Many<f32>, Many<f32>);
+rect_types!(Many<f32>, One<f32>, One<f32>, Many<f32>);
 
 enum RectangleNodeInput {
     One(RectangleInput<One<f32>, One<f32>, One<f32>, One<f32>>),
     ManyOneOneOne(RectangleInput<Many<f32>, One<f32>, One<f32>, One<f32>>),
     Many(RectangleInput<Many<f32>, Many<f32>, Many<f32>, Many<f32>>),
+    ManyOneOneMany(RectangleInput<Many<f32>, One<f32>, One<f32>, Many<f32>>),
 }
 
 impl RectangleNodeInput {
@@ -106,6 +108,7 @@ impl RectangleNodeInput {
                 RectangleInput::<One<f32>, One<f32>, One<f32>, One<f32>>::types(),
                 RectangleInput::<Many<f32>, One<f32>, One<f32>, One<f32>>::types(),
                 RectangleInput::<Many<f32>, Many<f32>, Many<f32>, Many<f32>>::types(),
+                RectangleInput::<Many<f32>, One<f32>, One<f32>, Many<f32>>::types(),
             ]
         });
         PossibleInputs { groups: &*GROUPS }
@@ -149,6 +152,20 @@ impl RectangleNodeInput {
                 let out = x.inner().map(move |x| Rectangle::new(x, y, width, height));
                 Box::new(Many::from(out))
             }
+            RectangleNodeInput::ManyOneOneMany(RectangleInput {
+                x,
+                y,
+                width,
+                height,
+            }) => {
+                let y = y.inner();
+                let width = width.inner();
+                let out = x
+                    .inner()
+                    .zip(height.inner())
+                    .map(move |(x, height)| Rectangle::new(x, y, width, height));
+                Box::new(Many::from(out))
+            }
         }
     }
     fn from_any(inputs: &mut Vec<Box<dyn Any>>) -> Result<Self, ()> {
@@ -164,6 +181,10 @@ impl RectangleNodeInput {
             RectangleInput::<Many<f32>, Many<f32>, Many<f32>, Many<f32>>::from_any(inputs)
         {
             Ok(RectangleNodeInput::Many(output))
+        } else if let Ok(output) =
+            RectangleInput::<Many<f32>, One<f32>, One<f32>, Many<f32>>::from_any(inputs)
+        {
+            Ok(RectangleNodeInput::ManyOneOneMany(output))
         } else {
             Err(())
         }
