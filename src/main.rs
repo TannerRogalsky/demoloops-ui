@@ -176,6 +176,7 @@ fn main() {
                 }
 
                 window.swap_buffers().expect("terrible, terrible damage");
+                ::nodes::GlobalNode::incr();
             }
             _ => {}
         }
@@ -186,10 +187,12 @@ const POSSIBLE_NODES: once_cell::sync::Lazy<Vec<Box<dyn Node>>> =
     once_cell::sync::Lazy::new(|| {
         vec![
             Box::new(::nodes::ConstantNode::Unsigned(0)),
+            Box::new(::nodes::GlobalNode),
             Box::new(::nodes::MultiplyNode),
             Box::new(::nodes::RangeNode),
             Box::new(::nodes::Range2DNode),
             Box::new(::nodes::RatioNode),
+            Box::new(ColorNode),
             Box::new(RectangleNode),
             Box::new(DrawNode),
         ]

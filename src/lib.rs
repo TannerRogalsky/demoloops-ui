@@ -238,6 +238,22 @@ impl UIGraph {
                         g.print(text, self.font, 32., bounds);
                     }
                 }
+
+                {
+                    use ::nodes::GlobalNode;
+                    if node.is::<GlobalNode>() {
+                        let text = GlobalNode::load().to_string();
+                        let bounds = Rectangle {
+                            x: metadata.position.x + 5.,
+                            y: metadata.position.y + Metadata::TOP_BAR_HEIGHT * 2.,
+                            width: metadata.dimensions.width - Metadata::OUTPUT_WIDTH,
+                            height: metadata.dimensions.height
+                                - 10.
+                                - Metadata::TOP_BAR_HEIGHT * 2.,
+                        };
+                        g.print(text, self.font, 32., bounds);
+                    }
+                }
             }
         }
 

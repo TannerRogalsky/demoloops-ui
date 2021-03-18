@@ -1,6 +1,42 @@
-use nodes::{InputGroup, InputInfo, Many, Node, NodeInput, NodeOutput, One, PossibleInputs};
+use nodes::{InputGroup, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
 use solstice_2d::{Color, Draw, Rectangle};
 use std::any::Any;
+
+struct DrawNodeInput {
+    geometry: OneOrMany<Rectangle>,
+    color: OneOrMany<Color>,
+}
+
+impl DrawNodeInput {
+    fn from_any(inputs: &mut Vec<Box<dyn Any>>) -> Result<Self, ()> {
+        if inputs.len() < 2 {
+            return Err(());
+        }
+
+        let valid = OneOrMany::<Rectangle>::is(&*inputs[0]) && OneOrMany::<Color>::is(&*inputs[1]);
+
+        if !valid {
+            return Err(());
+        }
+
+        fn take<T: 'static>(v: Box<dyn Any>) -> OneOrMany<T> {
+            OneOrMany::<T>::downcast(v).unwrap()
+        }
+
+        let mut inputs = inputs.drain(0..2);
+        let geometry = take(inputs.next().unwrap());
+        let color = take(inputs.next().unwrap());
+        Ok(Self { geometry, color })
+    }
+
+    fn op(self) -> Box<dyn Any> {
+        let mut dl = solstice_2d::DrawList::default();
+        for (geometry, color) in self.geometry.zip(self.color) {
+            dl.draw_with_color(geometry, color);
+        }
+        Box::new(nodes::One::new(dl))
+    }
+}
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct DrawNode;
@@ -9,29 +45,29 @@ impl NodeInput for DrawNode {
     fn inputs(&self) -> PossibleInputs {
         use once_cell::sync::Lazy;
         static GROUPS: Lazy<Vec<InputGroup>> = Lazy::new(|| {
-            static INFO1: Lazy<Vec<InputInfo>> = Lazy::new(|| {
-                vec![InputInfo {
-                    name: "geometry",
-                    ty_name: "One<Rectangle>",
-                    type_id: std::any::TypeId::of::<One<Rectangle>>(),
-                }]
-            });
+            use ::nodes::InputInfo;
+            use itertools::Itertools;
 
-            static INFO2: Lazy<Vec<InputInfo>> = Lazy::new(|| {
-                vec![InputInfo {
-                    name: "geometry",
-                    ty_name: "Many<Rectangle>",
-                    type_id: std::any::TypeId::of::<Many<Rectangle>>(),
-                }]
-            });
-            vec![
-                InputGroup {
-                    info: (&*INFO1).into(),
-                },
-                InputGroup {
-                    info: (&*INFO2).into(),
-                },
-            ]
+            let rectangle = OneOrMany::<Rectangle>::type_ids();
+            let color = OneOrMany::<Color>::type_ids();
+            std::array::IntoIter::new(rectangle)
+                .cartesian_product(std::array::IntoIter::new(color))
+                .map(|(rectangle, color)| InputGroup {
+                    info: vec![
+                        InputInfo {
+                            name: "geometry",
+                            ty_name: "Rectangle",
+                            type_id: rectangle,
+                        },
+                        InputInfo {
+                            name: "color",
+                            ty_name: "Color",
+                            type_id: color,
+                        },
+                    ]
+                    .into(),
+                })
+                .collect::<Vec<_>>()
         });
         PossibleInputs { groups: &*GROUPS }
     }
@@ -39,23 +75,7 @@ impl NodeInput for DrawNode {
 
 impl NodeOutput for DrawNode {
     fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
-        if self.inputs_match(&inputs) {
-            if inputs[0].is::<One<Rectangle>>() {
-                let rectangle = inputs.pop().unwrap().downcast::<One<Rectangle>>().unwrap();
-                let mut dl = solstice_2d::DrawList::default();
-                dl.draw_with_color(rectangle.inner(), Color::new(1., 1., 1., 1.));
-                Ok(Box::new(One::new(dl)))
-            } else {
-                let rectangles = inputs.pop().unwrap().downcast::<Many<Rectangle>>().unwrap();
-                let mut dl = solstice_2d::DrawList::default();
-                for rectangle in rectangles.inner() {
-                    dl.draw_with_color(rectangle, Color::new(1., 1., 1., 1.));
-                }
-                Ok(Box::new(One::new(dl)))
-            }
-        } else {
-            Err(())
-        }
+        DrawNodeInput::from_any(inputs).map(DrawNodeInput::op)
     }
 }
 
