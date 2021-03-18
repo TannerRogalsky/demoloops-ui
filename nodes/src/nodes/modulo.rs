@@ -77,15 +77,33 @@ macro_rules! group_impl {
     };
 }
 
-impl<X, Y, Z> ModuloGroup<X, Y>
-where
-    X: std::ops::Rem<Y, Output = Z> + Clone + std::fmt::Debug + 'static,
-    Y: Clone + std::fmt::Debug + 'static,
-    Z: Clone + std::fmt::Debug + 'static,
-{
+impl ModuloGroup<u32, u32> {
     pub fn op(self) -> Box<dyn Any> {
         use crate::one_many::op2;
-        let result = op2(self.numerator, self.denominator, std::ops::Rem::rem);
+        let result = op2(self.numerator, self.denominator, |num, den| {
+            if den == 0 {
+                0
+            } else {
+                num % den
+            }
+        });
+        match result {
+            OneOrMany::One(v) => Box::new(v),
+            OneOrMany::Many(v) => Box::new(v),
+        }
+    }
+}
+
+impl ModuloGroup<f32, f32> {
+    pub fn op(self) -> Box<dyn Any> {
+        use crate::one_many::op2;
+        let result = op2(self.numerator, self.denominator, |num, den| {
+            if den == 0. {
+                0.
+            } else {
+                num % den
+            }
+        });
         match result {
             OneOrMany::One(v) => Box::new(v),
             OneOrMany::Many(v) => Box::new(v),
