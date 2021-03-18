@@ -67,131 +67,161 @@ impl<T> Many<T> {
     }
 }
 
-impl<T> std::ops::Mul for One<T>
-where
-    T: std::ops::Mul<Output = T>,
-{
-    type Output = One<T>;
-
-    fn mul(self, rhs: Self) -> Self::Output {
-        One(self.0 * rhs.0)
-    }
-}
-impl<T> std::ops::Mul<Many<T>> for One<T>
-where
-    T: std::ops::Mul<Output = T> + Copy + 'static,
-{
-    type Output = Many<T>;
-
-    fn mul(self, rhs: Many<T>) -> Self::Output {
-        let lhs = self.0;
-        Many(Box::new(rhs.0.map(move |rhs| lhs * rhs)))
-    }
-}
-impl<T> std::ops::Mul for Many<T>
-where
-    T: std::ops::Mul<Output = T> + 'static,
-{
-    type Output = Many<T>;
-
-    fn mul(self, rhs: Self) -> Self::Output {
-        Many(Box::new(self.0.zip(rhs.0).map(|(lhs, rhs)| lhs * rhs)))
-    }
-}
-impl<T> std::ops::Mul<One<T>> for Many<T>
-where
-    T: std::ops::Mul<Output = T> + Copy + 'static,
-{
-    type Output = Many<T>;
-
-    fn mul(self, rhs: One<T>) -> Self::Output {
-        let rhs = rhs.0;
-        Many(Box::new(self.0.map(move |lhs| lhs * rhs)))
-    }
-}
-
 pub trait FromAny {
     fn from_any(inputs: &mut Vec<Box<dyn std::any::Any>>) -> Result<Self, ()>
     where
         Self: Sized;
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-struct Pair<A, B> {
-    lhs: A,
-    rhs: B,
-}
-macro_rules! pair_impl {
-    ($a: ty, $b: ty) => {
-        impl Pair<$a, $b> {
-            fn types() -> InputGroup<'static> {
-                use once_cell::sync::Lazy;
-                static INPUTS: Lazy<Vec<InputInfo>> = Lazy::new(|| {
-                    vec![
-                        InputInfo {
-                            name: "lhs",
-                            ty_name: stringify!($a),
-                            type_id: std::any::TypeId::of::<$a>(),
-                        },
-                        InputInfo {
-                            name: "rhs",
-                            ty_name: stringify!($b),
-                            type_id: std::any::TypeId::of::<$b>(),
-                        },
-                    ]
-                });
-                InputGroup { info: &*INPUTS }
-            }
-        }
-    };
+#[derive(Debug, Clone)]
+pub enum OneOrMany<T> {
+    One(One<T>),
+    Many(Many<T>),
 }
 
-pair_impl!(One<f32>, One<f32>);
-pair_impl!(One<f32>, Many<f32>);
-pair_impl!(Many<f32>, One<f32>);
-pair_impl!(Many<f32>, Many<f32>);
-pair_impl!(One<u32>, One<u32>);
-pair_impl!(One<u32>, Many<u32>);
-pair_impl!(Many<u32>, One<u32>);
-pair_impl!(Many<u32>, Many<u32>);
-
-impl<A, B> FromAny for Pair<A, B>
-where
-    A: 'static,
-    B: 'static,
-{
-    fn from_any(inputs: &mut Vec<Box<dyn Any>>) -> Result<Self, ()> {
-        if let Some(rhs) = inputs.pop() {
-            if let Some(lhs) = inputs.pop() {
-                let lhs = lhs.downcast::<A>();
-                let rhs = rhs.downcast::<B>();
-                match (lhs, rhs) {
-                    (Ok(lhs), Ok(rhs)) => Ok(Self {
-                        lhs: *lhs,
-                        rhs: *rhs,
-                    }),
-                    (Ok(lhs), Err(rhs)) => {
-                        inputs.push(lhs);
-                        inputs.push(rhs);
-                        Err(())
-                    }
-                    (Err(lhs), Ok(rhs)) => {
-                        inputs.push(lhs);
-                        inputs.push(rhs);
-                        Err(())
-                    }
-                    (Err(lhs), Err(rhs)) => {
-                        inputs.push(lhs);
-                        inputs.push(rhs);
-                        Err(())
-                    }
-                }
+impl<T: 'static> FromAny for OneOrMany<T> {
+    fn from_any(inputs: &mut Vec<Box<dyn Any>>) -> Result<Self, ()>
+    where
+        Self: Sized,
+    {
+        if let Some(input) = inputs.get(0) {
+            let input = &**input;
+            if input.is::<OneOrMany<T>>() {
+                Ok(*inputs.remove(0).downcast::<OneOrMany<T>>().unwrap())
+            } else if input.is::<One<T>>() {
+                let v = *inputs.remove(0).downcast::<One<T>>().unwrap();
+                Ok(OneOrMany::One(v))
+            } else if input.is::<Many<T>>() {
+                let v = *inputs.remove(0).downcast::<Many<T>>().unwrap();
+                Ok(OneOrMany::Many(v))
             } else {
-                inputs.push(rhs);
                 Err(())
             }
         } else {
             Err(())
+        }
+    }
+}
+
+impl<T: 'static> OneOrMany<T> {
+    pub fn is(v: &dyn Any) -> bool {
+        let v = v.type_id();
+        std::array::IntoIter::new(Self::type_ids()).any(|t| t == v)
+    }
+
+    pub fn downcast(v: Box<dyn Any>) -> Result<Self, Box<dyn Any>> {
+        fn take<T>(b: Box<T>) -> T {
+            *b
+        }
+
+        if v.is::<Self>() {
+            v.downcast::<Self>().map(take)
+        } else if v.is::<Many<T>>() {
+            v.downcast::<Many<T>>().map(take).map(OneOrMany::Many)
+        } else if v.is::<One<T>>() {
+            v.downcast::<One<T>>().map(take).map(OneOrMany::One)
+        } else {
+            Err(v)
+        }
+    }
+
+    pub fn type_ids() -> [std::any::TypeId; 3] {
+        use std::any::TypeId;
+        [
+            TypeId::of::<Self>(),
+            TypeId::of::<One<T>>(),
+            TypeId::of::<Many<T>>(),
+        ]
+    }
+}
+
+impl<T: Clone> Iterator for OneOrMany<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            OneOrMany::One(v) => Some(v.0.clone()),
+            OneOrMany::Many(v) => v.0.next(),
+        }
+    }
+}
+
+pub mod one_many {
+    use super::{Many, One, OneOrMany};
+
+    pub fn op1<A, O, FUNC>(a: OneOrMany<A>, op: FUNC) -> OneOrMany<O>
+    where
+        A: Clone + std::fmt::Debug + 'static,
+        O: Clone + std::fmt::Debug + 'static,
+        FUNC: Fn(A) -> O + 'static + Clone,
+    {
+        match a {
+            OneOrMany::One(a) => OneOrMany::One(One(op(a.0))),
+            OneOrMany::Many(a) => OneOrMany::Many(Many::from(a.0.map(move |a| op(a)))),
+        }
+    }
+
+    pub fn op2<A, B, O, FUNC>(a: OneOrMany<A>, b: OneOrMany<B>, op: FUNC) -> OneOrMany<O>
+    where
+        A: Clone + std::fmt::Debug + 'static,
+        B: Clone + std::fmt::Debug + 'static,
+        O: Clone + std::fmt::Debug + 'static,
+        FUNC: Fn(A, B) -> O + 'static + Clone,
+    {
+        match (a, b) {
+            (OneOrMany::One(a), OneOrMany::One(b)) => OneOrMany::One(One(op(a.0, b.0))),
+            (a, b) => OneOrMany::Many(Many::from(a.zip(b).map(move |(a, b)| op(a, b)))),
+        }
+    }
+
+    pub fn op3<A, B, C, O, FUNC>(
+        a: OneOrMany<A>,
+        b: OneOrMany<B>,
+        c: OneOrMany<C>,
+        op: FUNC,
+    ) -> OneOrMany<O>
+    where
+        A: Clone + std::fmt::Debug + 'static,
+        B: Clone + std::fmt::Debug + 'static,
+        C: Clone + std::fmt::Debug + 'static,
+        O: Clone + std::fmt::Debug + 'static,
+        FUNC: Fn(A, B, C) -> O + 'static + Clone,
+    {
+        match (a, b, c) {
+            (OneOrMany::One(a), OneOrMany::One(b), OneOrMany::One(c)) => {
+                OneOrMany::One(One(op(a.0, b.0, c.0)))
+            }
+            (a, b, c) => OneOrMany::Many(Many::from(
+                a.zip(b).zip(c).map(move |((a, b), c)| op(a, b, c)),
+            )),
+        }
+    }
+
+    pub fn op4<A, B, C, D, O, FUNC>(
+        a: OneOrMany<A>,
+        b: OneOrMany<B>,
+        c: OneOrMany<C>,
+        d: OneOrMany<D>,
+        op: FUNC,
+    ) -> OneOrMany<O>
+    where
+        A: Clone + std::fmt::Debug + 'static,
+        B: Clone + std::fmt::Debug + 'static,
+        C: Clone + std::fmt::Debug + 'static,
+        D: Clone + std::fmt::Debug + 'static,
+        O: Clone + std::fmt::Debug + 'static,
+        FUNC: Fn(A, B, C, D) -> O + 'static + Clone,
+    {
+        match (a, b, c, d) {
+            (OneOrMany::One(a), OneOrMany::One(b), OneOrMany::One(c), OneOrMany::One(d)) => {
+                OneOrMany::One(One(op(a.0, b.0, c.0, d.0)))
+            }
+            (a, b, c, d) => OneOrMany::Many(Many::from(
+                a.zip(b)
+                    .zip(c)
+                    .zip(d)
+                    .map(move |(((a, b), c), d)| op(a, b, c, d)),
+            )),
         }
     }
 }
@@ -218,9 +248,9 @@ impl PossibleInputs<'_> {
 }
 
 // Success is matching all of these
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct InputGroup<'a> {
-    pub info: &'a [InputInfo],
+    pub info: std::borrow::Cow<'a, [InputInfo]>,
 }
 
 impl InputGroup<'_> {
@@ -472,21 +502,83 @@ mod tests {
     use super::*;
 
     #[test]
-    fn many_one() {
+    fn one_or_many() {
         {
-            let a = One(2u32);
-            let b = One(4u32);
-            let c = a * b;
-            assert_eq!(One(8u32), c);
-
-            let d: Many<u32> = vec![2u32, 3, 4].into();
-            let e = One(2u32) * d;
-            assert_eq!(vec![4u32, 6, 8], e.clone().collect::<Vec<_>>());
-
-            let f = e * Into::<Many<u32>>::into(vec![4u32, 3, 2]);
-            assert_eq!(vec![16u32, 18, 16], f.collect::<Vec<_>>());
+            let a = OneOrMany::One(One::new(2u32));
+            let b = OneOrMany::One(One::new(3u32));
+            let c = one_many::op2(a, b, std::ops::Mul::mul);
+            match c {
+                OneOrMany::One(c) => assert_eq!(6u32, c.inner()),
+                OneOrMany::Many(_) => panic!(),
+            }
         }
 
+        {
+            let a = OneOrMany::One(One::new(2u32));
+            let b = OneOrMany::Many(Many::from(3u32..5u32));
+            let c = one_many::op2(a, b, std::ops::Mul::mul);
+            match c {
+                OneOrMany::One(_) => panic!(),
+                OneOrMany::Many(c) => assert_eq!(vec![6, 8], c.collect::<Vec<_>>()),
+            }
+        }
+
+        {
+            let a = OneOrMany::One(One::new(2u32));
+            let b = OneOrMany::Many(Many::from(3u32..5u32));
+            let c = one_many::op2(a, b, std::ops::Mul::mul);
+            match c {
+                OneOrMany::One(_) => panic!(),
+                OneOrMany::Many(c) => assert_eq!(vec![6, 8], c.collect::<Vec<_>>()),
+            }
+        }
+
+        {
+            let a = OneOrMany::Many(Many::from(3u32..5u32));
+            let b = OneOrMany::Many(Many::from(3u32..5u32));
+            let c = one_many::op2(a, b, std::ops::Mul::mul);
+            match c {
+                OneOrMany::One(_) => panic!(),
+                OneOrMany::Many(c) => assert_eq!(vec![9, 16], c.collect::<Vec<_>>()),
+            }
+        }
+
+        {
+            let a = OneOrMany::One(One::new(2u32));
+            let b = OneOrMany::One(One::new(3u32));
+            let c = OneOrMany::One(One::new(4u32));
+            let out = one_many::op3(a, b, c, |a, b, c| a + b + c);
+            match out {
+                OneOrMany::One(out) => assert_eq!(2 + 3 + 4, out.inner()),
+                OneOrMany::Many(_) => panic!(),
+            }
+        }
+
+        {
+            let a = OneOrMany::Many(Many::from(3u32..5u32));
+            let b = OneOrMany::One(One::new(0u32));
+            let c = OneOrMany::Many(Many::from(3u32..5u32));
+            let out = one_many::op3(a, b, c, |a, b, c| a + b + c);
+            match out {
+                OneOrMany::One(_) => panic!(),
+                OneOrMany::Many(out) => assert_eq!(vec![6, 8], out.collect::<Vec<_>>()),
+            }
+        }
+
+        {
+            let a = OneOrMany::Many(Many::from(3u32..5u32));
+            let b = OneOrMany::Many(Many::from(3u32..5u32));
+            let c = OneOrMany::Many(Many::from(3u32..5u32));
+            let out = one_many::op3(a, b, c, |a, b, c| a + b + c);
+            match out {
+                OneOrMany::One(_) => panic!(),
+                OneOrMany::Many(out) => assert_eq!(vec![9, 12], out.collect::<Vec<_>>()),
+            }
+        }
+    }
+
+    #[test]
+    fn many_one() {
         {
             let mut buffer: Vec<Box<dyn Any>> = Vec::new();
             buffer.push(Box::new(One(2u32)));
@@ -505,8 +597,8 @@ mod tests {
 
         {
             let mut buffer: Vec<Box<dyn Any>> = Vec::new();
-            buffer.push(Box::new(One(3u32)));
             buffer.push(Box::new(Into::<Many<u32>>::into(0u32..3)));
+            buffer.push(Box::new(One(3u32)));
             assert!(RatioNode.inputs_match(&buffer));
 
             let output = RatioNode.op(&mut buffer).unwrap();
@@ -531,14 +623,14 @@ mod tests {
 
             let constant_output = constant.op(&mut buffer).unwrap();
 
-            buffer.push(constant_output);
             buffer.push(range_output);
+            buffer.push(constant_output);
             let ratio_output = ratio.op(&mut buffer).unwrap();
 
             let constant_output = ConstantNode::Float(2.).op(&mut buffer).unwrap();
 
-            buffer.push(constant_output);
             buffer.push(ratio_output);
+            buffer.push(constant_output);
             let multiply_output = multiply.op(&mut buffer).unwrap();
 
             let output = multiply_output.downcast::<Many<f32>>().unwrap();
@@ -572,8 +664,8 @@ mod tests {
             graph.connect(width, total, 0);
             graph.connect(height, total, 1);
 
-            graph.connect(total, graph.root, 0);
-            graph.connect(index, graph.root, 1);
+            graph.connect(index, graph.root, 0);
+            graph.connect(total, graph.root, 1);
 
             let output = graph.execute().unwrap().downcast::<Many<f32>>().unwrap();
             let control = (0..WIDTH)

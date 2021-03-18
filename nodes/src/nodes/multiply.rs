@@ -1,63 +1,95 @@
-use crate::{FromAny, InputGroup, Many, Node, NodeInput, NodeOutput, One, Pair, PossibleInputs};
+use crate::{FromAny, InputGroup, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
 use std::any::Any;
 
 #[derive(Debug, Clone)]
-enum MultiplyGroup<T> {
-    OneOne(Pair<One<T>, One<T>>),
-    OneMany(Pair<One<T>, Many<T>>),
-    ManyOne(Pair<Many<T>, One<T>>),
-    ManyMany(Pair<Many<T>, Many<T>>),
+struct MultiplyGroup<T> {
+    lhs: OneOrMany<T>,
+    rhs: OneOrMany<T>,
+}
+
+impl<T: 'static> FromAny for MultiplyGroup<T> {
+    fn from_any(inputs: &mut Vec<Box<dyn Any>>) -> Result<Self, ()>
+    where
+        Self: Sized,
+    {
+        if inputs.len() < 2 {
+            return Err(());
+        }
+
+        let valid = inputs[0..2]
+            .iter()
+            .all(|input| OneOrMany::<T>::is(&**input));
+
+        if !valid {
+            return Err(());
+        }
+
+        let mut inputs = inputs
+            .drain(0..2)
+            .map(OneOrMany::<T>::downcast)
+            .map(Result::unwrap);
+        Ok(Self {
+            lhs: inputs.next().unwrap(),
+            rhs: inputs.next().unwrap(),
+        })
+    }
+}
+
+impl<T> MultiplyGroup<T>
+where
+    T: std::ops::Mul<Output = T> + Clone + std::fmt::Debug + 'static,
+{
+    pub fn op(self) -> Box<dyn Any> {
+        match crate::one_many::op2(self.lhs, self.rhs, std::ops::Mul::mul) {
+            OneOrMany::One(v) => Box::new(v),
+            OneOrMany::Many(v) => Box::new(v),
+        }
+    }
 }
 
 macro_rules! group_impl {
     ($t: ty) => {
         impl MultiplyGroup<$t> {
-            fn types() -> [InputGroup<'static>; 4] {
-                [
-                    Pair::<One<$t>, One<$t>>::types(),
-                    Pair::<One<$t>, Many<$t>>::types(),
-                    Pair::<Many<$t>, One<$t>>::types(),
-                    Pair::<Many<$t>, Many<$t>>::types(),
-                ]
+            fn gen_groups() -> Vec<InputGroup<'static>> {
+                use crate::InputInfo;
+                use itertools::Itertools;
+
+                let lhs = OneOrMany::<$t>::type_ids();
+                let rhs = OneOrMany::<$t>::type_ids();
+                let groups = std::array::IntoIter::new(lhs)
+                    .cartesian_product(std::array::IntoIter::new(rhs))
+                    .map(|(lhs, rhs)| InputGroup {
+                        info: vec![
+                            InputInfo {
+                                name: "lhs",
+                                ty_name: stringify!($t),
+                                type_id: lhs,
+                            },
+                            InputInfo {
+                                name: "rhs",
+                                ty_name: stringify!($t),
+                                type_id: rhs,
+                            },
+                        ]
+                        .into(),
+                    })
+                    .collect::<Vec<_>>();
+                groups
+            }
+
+            fn types() -> &'static [InputGroup<'static>] {
+                use once_cell::sync::Lazy;
+
+                static GROUPS: Lazy<Vec<InputGroup<'static>>> =
+                    Lazy::new(MultiplyGroup::<$t>::gen_groups);
+                &*GROUPS
             }
         }
     };
 }
-group_impl!(f32);
+
 group_impl!(u32);
-
-impl<T> MultiplyGroup<T>
-where
-    T: std::ops::Mul<Output = T> + Copy + 'static,
-{
-    fn op(self) -> Box<dyn Any> {
-        match self {
-            MultiplyGroup::OneOne(Pair { lhs, rhs }) => Box::new(lhs * rhs),
-            MultiplyGroup::OneMany(Pair { lhs, rhs }) => Box::new(lhs * rhs),
-            MultiplyGroup::ManyOne(Pair { lhs, rhs }) => Box::new(lhs * rhs),
-            MultiplyGroup::ManyMany(Pair { lhs, rhs }) => Box::new(lhs * rhs),
-        }
-    }
-}
-
-impl<T> FromAny for MultiplyGroup<T>
-where
-    T: 'static,
-{
-    fn from_any(inputs: &mut Vec<Box<dyn std::any::Any>>) -> Result<Self, ()> {
-        if let Ok(one_one) = Pair::<One<T>, One<T>>::from_any(inputs) {
-            Ok(MultiplyGroup::OneOne(one_one))
-        } else if let Ok(one_many) = Pair::<One<T>, Many<T>>::from_any(inputs) {
-            Ok(MultiplyGroup::OneMany(one_many))
-        } else if let Ok(many_many) = Pair::<Many<T>, Many<T>>::from_any(inputs) {
-            Ok(MultiplyGroup::ManyMany(many_many))
-        } else if let Ok(many_one) = Pair::<Many<T>, One<T>>::from_any(inputs) {
-            Ok(MultiplyGroup::ManyOne(many_one))
-        } else {
-            Err(())
-        }
-    }
-}
+group_impl!(f32);
 
 #[derive(Debug, Clone)]
 enum MultiplyNodeInput {
@@ -134,7 +166,10 @@ mod tests {
 
     #[test]
     fn inputs() {
+        let inputs = MultiplyGroup::<f32>::types();
+        assert_eq!(9, inputs.len());
+
         let inputs = MultiplyNode.inputs();
-        assert_eq!(6, inputs.groups.len());
+        assert_eq!(18, inputs.groups.len());
     }
 }

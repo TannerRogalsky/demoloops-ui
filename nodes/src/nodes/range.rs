@@ -23,7 +23,9 @@ impl RangeNodeInput {
                     type_id: std::any::TypeId::of::<One<u32>>(),
                 }]
             });
-            vec![InputGroup { info: &*INFO }]
+            vec![InputGroup {
+                info: (&*INFO).into(),
+            }]
         });
         PossibleInputs { groups: &*GROUPS }
     }
@@ -97,7 +99,9 @@ impl Range2DNodeInput {
                     },
                 ]
             });
-            vec![InputGroup { info: &*INFO }]
+            vec![InputGroup {
+                info: (&*INFO).into(),
+            }]
         });
         PossibleInputs { groups: &*GROUPS }
     }

@@ -24,7 +24,14 @@ impl NodeInput for DrawNode {
                     type_id: std::any::TypeId::of::<Many<Rectangle>>(),
                 }]
             });
-            vec![InputGroup { info: &*INFO1 }, InputGroup { info: &*INFO2 }]
+            vec![
+                InputGroup {
+                    info: (&*INFO1).into(),
+                },
+                InputGroup {
+                    info: (&*INFO2).into(),
+                },
+            ]
         });
         PossibleInputs { groups: &*GROUPS }
     }

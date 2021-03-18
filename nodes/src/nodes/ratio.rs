@@ -1,112 +1,134 @@
-use crate::{FromAny, InputGroup, Many, Node, NodeInput, NodeOutput, One, Pair, PossibleInputs};
+use crate::{FromAny, InputGroup, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
 use std::any::Any;
 
-#[derive(Debug, Clone)]
-enum RatioGroup<T>
+struct RatioGroup<X, Y> {
+    numerator: OneOrMany<X>,
+    denominator: OneOrMany<Y>,
+}
+
+impl<X, Y> FromAny for RatioGroup<X, Y>
 where
-    T: 'static,
+    X: 'static,
+    Y: 'static,
 {
-    OneOne(Pair<One<T>, One<T>>),
-    OneMany(Pair<One<T>, Many<T>>),
+    fn from_any(inputs: &mut Vec<Box<dyn Any>>) -> Result<Self, ()> {
+        if inputs.len() < 2 {
+            return Err(());
+        }
+
+        let valid = OneOrMany::<X>::is(&*inputs[0]) && OneOrMany::<Y>::is(&*inputs[1]);
+
+        if !valid {
+            return Err(());
+        }
+
+        fn take<T: 'static>(v: Box<dyn Any>) -> OneOrMany<T> {
+            OneOrMany::<T>::downcast(v).unwrap()
+        }
+
+        let mut inputs = inputs.drain(0..2);
+        let numerator = take(inputs.next().unwrap());
+        let denominator = take(inputs.next().unwrap());
+        Ok(Self {
+            numerator,
+            denominator,
+        })
+    }
 }
 
 macro_rules! group_impl {
-    ($t: ty) => {
-        impl RatioGroup<$t> {
-            fn types() -> [InputGroup<'static>; 2] {
-                [
-                    Pair::<One<$t>, One<$t>>::types(),
-                    Pair::<One<$t>, Many<$t>>::types(),
-                ]
+    ($x: ty, $y: ty) => {
+        impl RatioGroup<$x, $y> {
+            fn gen_groups() -> Vec<InputGroup<'static>> {
+                use crate::InputInfo;
+                use itertools::Itertools;
+
+                let lhs = OneOrMany::<$x>::type_ids();
+                let rhs = OneOrMany::<$y>::type_ids();
+                let groups = std::array::IntoIter::new(lhs)
+                    .cartesian_product(std::array::IntoIter::new(rhs))
+                    .map(|(lhs, rhs)| InputGroup {
+                        info: vec![
+                            InputInfo {
+                                name: "numerator",
+                                ty_name: stringify!($x),
+                                type_id: lhs,
+                            },
+                            InputInfo {
+                                name: "denominator",
+                                ty_name: stringify!($y),
+                                type_id: rhs,
+                            },
+                        ]
+                        .into(),
+                    })
+                    .collect::<Vec<_>>();
+                groups
+            }
+
+            fn types() -> &'static [InputGroup<'static>] {
+                use once_cell::sync::Lazy;
+
+                static GROUPS: Lazy<Vec<InputGroup<'static>>> =
+                    Lazy::new(RatioGroup::<$x, $y>::gen_groups);
+                &*GROUPS
             }
         }
     };
 }
-group_impl!(f32);
-group_impl!(u32);
 
-impl<T> RatioGroup<T> {
-    fn from_any(inputs: &mut Vec<Box<dyn std::any::Any>>) -> Result<Self, ()> {
-        if let Ok(one_one) = Pair::<One<T>, One<T>>::from_any(inputs) {
-            Ok(RatioGroup::OneOne(one_one))
-        } else if let Ok(one_many) = Pair::<One<T>, Many<T>>::from_any(inputs) {
-            Ok(RatioGroup::OneMany(one_many))
-        } else {
-            Err(())
-        }
-    }
-}
-
-impl<T> RatioGroup<T>
+impl<X, Y> RatioGroup<X, Y>
 where
-    T: std::ops::Rem<Output = T> + Into<f64> + Copy + 'static,
+    X: std::ops::Rem<Y, Output = Y> + Into<f64> + Clone + std::fmt::Debug + 'static,
+    Y: Into<f64> + Clone + std::fmt::Debug + 'static,
 {
-    fn op(self) -> Box<dyn Any> {
-        fn ratio<T>(length: T, count: T) -> f32
-        where
-            T: std::ops::Rem<Output = T> + Into<f64> + Copy,
-        {
-            (count.rem(length).into() / length.into()) as f32
-        }
-
-        match self {
-            Self::OneOne(Pair { lhs, rhs }) => Box::new(One(ratio(lhs.inner(), rhs.inner()))),
-            Self::OneMany(Pair { lhs, rhs }) => {
-                let out = rhs.inner().map(move |count| ratio(lhs.inner(), count));
-                Box::new(Many::from(out))
+    pub fn op(self) -> Box<dyn Any> {
+        use crate::one_many::op2;
+        let result = op2(self.numerator, self.denominator, |count, length| {
+            if length.clone().into() == 0. {
+                0.
+            } else {
+                let remainder = count.rem(length.clone());
+                (remainder.into() / length.into()) as f32
             }
-        }
-    }
-}
-
-enum RatioNodeInput {
-    F32(RatioGroup<f32>),
-    U32(RatioGroup<u32>),
-}
-
-impl RatioNodeInput {
-    fn op(self) -> Box<dyn Any> {
-        match self {
-            Self::F32(group) => group.op(),
-            Self::U32(group) => group.op(),
-        }
-    }
-
-    fn types() -> PossibleInputs<'static> {
-        use once_cell::sync::Lazy;
-        static GROUPS: Lazy<Vec<InputGroup>> = Lazy::new(|| {
-            let float = RatioGroup::<f32>::types();
-            let unsigned = RatioGroup::<u32>::types();
-            vec![float[0], float[1], unsigned[0], unsigned[1]]
         });
-        PossibleInputs { groups: &*GROUPS }
-    }
-}
-
-impl FromAny for RatioNodeInput {
-    fn from_any(inputs: &mut Vec<Box<dyn std::any::Any>>) -> Result<Self, ()> {
-        if let Ok(output) = RatioGroup::<f32>::from_any(inputs) {
-            Ok(RatioNodeInput::F32(output))
-        } else if let Ok(output) = RatioGroup::<u32>::from_any(inputs) {
-            Ok(RatioNodeInput::U32(output))
-        } else {
-            Err(())
+        match result {
+            OneOrMany::One(v) => Box::new(v),
+            OneOrMany::Many(v) => Box::new(v),
         }
     }
 }
+
+group_impl!(u32, u32);
+group_impl!(f32, f32);
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct RatioNode;
 
 impl NodeInput for RatioNode {
     fn inputs(&self) -> PossibleInputs {
-        RatioNodeInput::types()
+        use once_cell::sync::Lazy;
+        static GROUPS: Lazy<Vec<InputGroup>> = Lazy::new(|| {
+            let float = RatioGroup::<f32, f32>::types();
+            let unsigned = RatioGroup::<u32, u32>::types();
+            let mut groups = vec![];
+            groups.extend_from_slice(&float);
+            groups.extend_from_slice(&unsigned);
+            groups
+        });
+        PossibleInputs { groups: &*GROUPS }
     }
 }
 
 impl NodeOutput for RatioNode {
     fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
-        RatioNodeInput::from_any(inputs).map(RatioNodeInput::op)
+        if let Ok(output) = RatioGroup::<f32, f32>::from_any(inputs) {
+            Ok(output.op())
+        } else if let Ok(output) = RatioGroup::<u32, u32>::from_any(inputs) {
+            Ok(output.op())
+        } else {
+            Err(())
+        }
     }
 }
 

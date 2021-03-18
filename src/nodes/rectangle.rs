@@ -1,208 +1,137 @@
-use nodes::{InputGroup, InputInfo, Many, Node, NodeInput, NodeOutput, One, PossibleInputs};
+use nodes::{InputGroup, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
 use solstice_2d::Rectangle;
 use std::any::Any;
 
 struct RectangleInput<X, Y, W, H> {
-    x: X,
-    y: Y,
-    width: W,
-    height: H,
+    x: OneOrMany<X>,
+    y: OneOrMany<Y>,
+    width: OneOrMany<W>,
+    height: OneOrMany<H>,
 }
 
-impl<A, B, C, D> RectangleInput<A, B, C, D>
+impl<X, Y, W, H> RectangleInput<X, Y, W, H>
 where
-    A: 'static,
-    B: 'static,
-    C: 'static,
-    D: 'static,
+    X: 'static,
+    Y: 'static,
+    W: 'static,
+    H: 'static,
 {
     fn from_any(inputs: &mut Vec<Box<dyn Any>>) -> Result<Self, ()> {
-        if inputs.len() == 4 {
-            let mut my_inputs = inputs.drain(..);
-            let x = my_inputs.next().unwrap().downcast::<A>();
-            let y = my_inputs.next().unwrap().downcast::<B>();
-            let width = my_inputs.next().unwrap().downcast::<C>();
-            let height = my_inputs.next().unwrap().downcast::<D>();
-            drop(my_inputs);
-            if x.is_ok() && y.is_ok() && width.is_ok() && height.is_ok() {
-                Ok(RectangleInput {
-                    x: *x.unwrap(),
-                    y: *y.unwrap(),
-                    width: *width.unwrap(),
-                    height: *height.unwrap(),
-                })
-            } else {
-                fn tx<T>(v: Result<Box<T>, Box<dyn Any>>) -> Box<dyn Any>
-                where
-                    T: 'static,
-                {
-                    match v {
-                        Err(e) => e,
-                        Ok(v) => v,
-                    }
-                }
-                inputs.push(tx(x));
-                inputs.push(tx(y));
-                inputs.push(tx(width));
-                inputs.push(tx(height));
-                Err(())
-            }
-        } else {
-            Err(())
+        if inputs.len() < 4 {
+            return Err(());
         }
+
+        let valid = OneOrMany::<X>::is(&*inputs[0])
+            && OneOrMany::<Y>::is(&*inputs[1])
+            && OneOrMany::<W>::is(&*inputs[2])
+            && OneOrMany::<H>::is(&*inputs[3]);
+
+        if !valid {
+            return Err(());
+        }
+
+        fn take<T: 'static>(v: Box<dyn Any>) -> OneOrMany<T> {
+            OneOrMany::<T>::downcast(v).unwrap()
+        }
+
+        let mut inputs = inputs.drain(0..4);
+        let x = take(inputs.next().unwrap());
+        let y = take(inputs.next().unwrap());
+        let width = take(inputs.next().unwrap());
+        let height = take(inputs.next().unwrap());
+        Ok(Self {
+            x,
+            y,
+            width,
+            height,
+        })
     }
 }
 
-macro_rules! rect_types {
+macro_rules! group_impl {
     ($x: ty, $y: ty, $w: ty, $h: ty) => {
         impl RectangleInput<$x, $y, $w, $h> {
-            fn types() -> InputGroup<'static> {
+            fn gen_groups() -> Vec<InputGroup<'static>> {
+                use ::nodes::InputInfo;
+                use itertools::Itertools;
+
+                let x = OneOrMany::<$x>::type_ids();
+                let y = OneOrMany::<$y>::type_ids();
+                let width = OneOrMany::<$w>::type_ids();
+                let height = OneOrMany::<$h>::type_ids();
+                let groups = std::array::IntoIter::new([x, y, width, height])
+                    .map(|v| std::array::IntoIter::new(v))
+                    .multi_cartesian_product()
+                    .map(|mut types| {
+                        let mut types = types.drain(..);
+                        InputGroup {
+                            info: vec![
+                                InputInfo {
+                                    name: "x",
+                                    ty_name: stringify!($x),
+                                    type_id: types.next().unwrap(),
+                                },
+                                InputInfo {
+                                    name: "y",
+                                    ty_name: stringify!($y),
+                                    type_id: types.next().unwrap(),
+                                },
+                                InputInfo {
+                                    name: "width",
+                                    ty_name: stringify!($w),
+                                    type_id: types.next().unwrap(),
+                                },
+                                InputInfo {
+                                    name: "height",
+                                    ty_name: stringify!($h),
+                                    type_id: types.next().unwrap(),
+                                },
+                            ]
+                            .into(),
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                groups
+            }
+
+            fn types() -> &'static [InputGroup<'static>] {
                 use once_cell::sync::Lazy;
-                static INPUTS: Lazy<Vec<InputInfo>> = Lazy::new(|| {
-                    vec![
-                        InputInfo {
-                            name: "x",
-                            ty_name: stringify!($x),
-                            type_id: std::any::TypeId::of::<$x>(),
-                        },
-                        InputInfo {
-                            name: "y",
-                            ty_name: stringify!($y),
-                            type_id: std::any::TypeId::of::<$y>(),
-                        },
-                        InputInfo {
-                            name: "width",
-                            ty_name: stringify!($w),
-                            type_id: std::any::TypeId::of::<$w>(),
-                        },
-                        InputInfo {
-                            name: "height",
-                            ty_name: stringify!($h),
-                            type_id: std::any::TypeId::of::<$h>(),
-                        },
-                    ]
-                });
-                InputGroup { info: &*INPUTS }
+
+                static GROUPS: Lazy<Vec<InputGroup<'static>>> =
+                    Lazy::new(RectangleInput::<$x, $y, $w, $h>::gen_groups);
+                &*GROUPS
             }
         }
     };
 }
 
-rect_types!(One<f32>, One<f32>, One<f32>, One<f32>);
-rect_types!(Many<f32>, One<f32>, One<f32>, One<f32>);
-rect_types!(Many<f32>, Many<f32>, Many<f32>, Many<f32>);
-rect_types!(Many<f32>, One<f32>, One<f32>, Many<f32>);
-
-enum RectangleNodeInput {
-    One(RectangleInput<One<f32>, One<f32>, One<f32>, One<f32>>),
-    ManyOneOneOne(RectangleInput<Many<f32>, One<f32>, One<f32>, One<f32>>),
-    Many(RectangleInput<Many<f32>, Many<f32>, Many<f32>, Many<f32>>),
-    ManyOneOneMany(RectangleInput<Many<f32>, One<f32>, One<f32>, Many<f32>>),
-}
-
-impl RectangleNodeInput {
-    fn types() -> PossibleInputs<'static> {
-        use once_cell::sync::Lazy;
-        static GROUPS: Lazy<Vec<InputGroup>> = Lazy::new(|| {
-            vec![
-                RectangleInput::<One<f32>, One<f32>, One<f32>, One<f32>>::types(),
-                RectangleInput::<Many<f32>, One<f32>, One<f32>, One<f32>>::types(),
-                RectangleInput::<Many<f32>, Many<f32>, Many<f32>, Many<f32>>::types(),
-                RectangleInput::<Many<f32>, One<f32>, One<f32>, Many<f32>>::types(),
-            ]
-        });
-        PossibleInputs { groups: &*GROUPS }
-    }
+impl RectangleInput<f32, f32, f32, f32> {
     fn op(self) -> Box<dyn Any> {
-        match self {
-            Self::One(RectangleInput {
-                x,
-                y,
-                width,
-                height,
-            }) => Box::new(One::new(Rectangle::new(
-                x.inner(),
-                y.inner(),
-                width.inner(),
-                height.inner(),
-            ))),
-            Self::Many(RectangleInput {
-                x,
-                y,
-                width,
-                height,
-            }) => {
-                let out = x
-                    .inner()
-                    .zip(y.inner())
-                    .zip(width.inner())
-                    .zip(height.inner())
-                    .map(|(((x, y), width), height)| Rectangle::new(x, y, width, height));
-                Box::new(Many::from(out))
-            }
-            RectangleNodeInput::ManyOneOneOne(RectangleInput {
-                x,
-                y,
-                width,
-                height,
-            }) => {
-                let y = y.inner();
-                let width = width.inner();
-                let height = height.inner();
-                let out = x.inner().map(move |x| Rectangle::new(x, y, width, height));
-                Box::new(Many::from(out))
-            }
-            RectangleNodeInput::ManyOneOneMany(RectangleInput {
-                x,
-                y,
-                width,
-                height,
-            }) => {
-                let y = y.inner();
-                let width = width.inner();
-                let out = x
-                    .inner()
-                    .zip(height.inner())
-                    .map(move |(x, height)| Rectangle::new(x, y, width, height));
-                Box::new(Many::from(out))
-            }
-        }
-    }
-    fn from_any(inputs: &mut Vec<Box<dyn Any>>) -> Result<Self, ()> {
-        if let Ok(output) =
-            RectangleInput::<One<f32>, One<f32>, One<f32>, One<f32>>::from_any(inputs)
-        {
-            Ok(RectangleNodeInput::One(output))
-        } else if let Ok(output) =
-            RectangleInput::<Many<f32>, One<f32>, One<f32>, One<f32>>::from_any(inputs)
-        {
-            Ok(RectangleNodeInput::ManyOneOneOne(output))
-        } else if let Ok(output) =
-            RectangleInput::<Many<f32>, Many<f32>, Many<f32>, Many<f32>>::from_any(inputs)
-        {
-            Ok(RectangleNodeInput::Many(output))
-        } else if let Ok(output) =
-            RectangleInput::<Many<f32>, One<f32>, One<f32>, Many<f32>>::from_any(inputs)
-        {
-            Ok(RectangleNodeInput::ManyOneOneMany(output))
-        } else {
-            Err(())
+        use ::nodes::one_many::op4;
+        let result = op4(self.x, self.y, self.width, self.height, Rectangle::new);
+        match result {
+            OneOrMany::One(v) => Box::new(v),
+            OneOrMany::Many(v) => Box::new(v),
         }
     }
 }
+group_impl!(f32, f32, f32, f32);
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct RectangleNode;
 
 impl NodeInput for RectangleNode {
     fn inputs(&self) -> PossibleInputs<'static> {
-        RectangleNodeInput::types()
+        PossibleInputs {
+            groups: RectangleInput::types(),
+        }
     }
 }
 
 impl NodeOutput for RectangleNode {
     fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
-        RectangleNodeInput::from_any(inputs).map(RectangleNodeInput::op)
+        RectangleInput::<f32, f32, f32, f32>::from_any(inputs)
+            .map(RectangleInput::<f32, f32, f32, f32>::op)
     }
 }
 
@@ -216,6 +145,7 @@ impl Node for RectangleNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ::nodes::{Many, One};
 
     #[test]
     fn one() {
