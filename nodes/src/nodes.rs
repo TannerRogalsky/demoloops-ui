@@ -1,5 +1,6 @@
 mod constant;
 mod global;
+mod modulo;
 mod multiply;
 mod range;
 mod ratio;
@@ -9,3 +10,4 @@ pub use global::GlobalNode;
 pub use multiply::MultiplyNode;
 pub use range::{Range2DNode, RangeNode};
 pub use ratio::RatioNode;
+pub use modulo::ModuloNode;
