@@ -63,6 +63,7 @@ fn main() {
 
     let mut ui_state = UIState::None;
     let mut mouse_position = PhysicalPosition::new(0., 0.);
+    // let mut selected_nodes = std::collections::HashSet::new();
 
     let mut show_graph = true;
     let mut times = std::collections::VecDeque::with_capacity(60);
@@ -87,7 +88,7 @@ fn main() {
                                 },
                             ..
                         } => {
-                            ui_state = ui_state.handle_event(
+                            ui_state = ui_state.clone().handle_event(
                                 UIEvent::KeyboardInput { state, key_code },
                                 UIContext {
                                     mouse_position,
@@ -103,7 +104,7 @@ fn main() {
                             }
                         }
                         WindowEvent::MouseInput { state, button, .. } => {
-                            ui_state = ui_state.handle_event(
+                            ui_state = ui_state.clone().handle_event(
                                 UIEvent::MouseInput { state, button },
                                 UIContext {
                                     mouse_position,
@@ -112,7 +113,7 @@ fn main() {
                             )
                         }
                         WindowEvent::CursorMoved { position, .. } => {
-                            ui_state = ui_state.handle_event(
+                            ui_state = ui_state.clone().handle_event(
                                 UIEvent::MouseMoved(position),
                                 UIContext {
                                     mouse_position,
@@ -251,6 +252,17 @@ struct NewConnectionContext {
 }
 
 #[derive(Debug, Copy, Clone)]
+struct MultiSelectContext {
+    origin: PhysicalPosition<f64>,
+}
+
+#[derive(Debug, Clone)]
+struct MultiMoveContext {
+    selected: Vec<NodeID>,
+    moving: bool,
+}
+
+#[derive(Debug, Copy, Clone)]
 enum UIEvent {
     KeyboardInput {
         state: glutin::event::ElementState,
@@ -268,22 +280,30 @@ struct UIContext<'a> {
     graph: &'a mut UIGraph,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 enum UIState {
     None,
     NodeAction(ActionContext),
     NewNode(NewNodeContext),
     NewConnection(NewConnectionContext),
+    MultiSelect(MultiSelectContext),
+    MultiMove(MultiMoveContext),
 }
 
 impl UIState {
     pub fn render(&self, g: &mut solstice_2d::GraphicsLock, context: UIContext) {
+        const SELECTION_COLOR: solstice_2d::Color = solstice_2d::Color {
+            red: 1.,
+            green: 0.,
+            blue: 1.,
+            alpha: 0.5,
+        };
         match self {
             UIState::None => {}
             UIState::NodeAction(ctx) => {
                 if let Some(metadata) = context.graph.metadata().get(ctx.node_id) {
                     let bounds: solstice_2d::Rectangle = metadata.into();
-                    g.stroke_with_color(bounds, solstice_2d::Color::new(1., 0., 1., 0.5));
+                    g.stroke_with_color(bounds, SELECTION_COLOR);
                 }
             }
             UIState::NewNode(ctx) => {
@@ -315,10 +335,45 @@ impl UIState {
                     }))
                 }
             }
+            UIState::MultiSelect(ctx) => {
+                let x = ctx.origin.x as f32;
+                let y = ctx.origin.y as f32;
+                let x2 = context.mouse_position.x as f32;
+                let y2 = context.mouse_position.y as f32;
+                let width = x2 - x;
+                let height = y2 - y;
+                let bounds = solstice_2d::Rectangle {
+                    x,
+                    y,
+                    width,
+                    height,
+                };
+
+                for metadata in context.graph.metadata().values() {
+                    let node_bounds: solstice_2d::Rectangle = metadata.into();
+                    if rects_collide(&bounds, &node_bounds) {
+                        let bounds: solstice_2d::Rectangle = metadata.into();
+                        g.stroke_with_color(bounds, SELECTION_COLOR);
+                    }
+                }
+
+                g.stroke_with_color(bounds, solstice_2d::Color::new(1., 1., 1., 0.75));
+            }
+            UIState::MultiMove(ctx) => {
+                for metadata in ctx
+                    .selected
+                    .iter()
+                    .copied()
+                    .filter_map(|node| context.graph.metadata().get(node))
+                {
+                    let bounds: solstice_2d::Rectangle = metadata.into();
+                    g.stroke_with_color(bounds, SELECTION_COLOR);
+                }
+            }
         }
     }
 
-    pub fn handle_event(self, event: UIEvent, context: UIContext) -> Self {
+    pub fn handle_event(mut self, event: UIEvent, context: UIContext) -> Self {
         let UIContext {
             mouse_position,
             graph,
@@ -362,7 +417,9 @@ impl UIState {
                                         self
                                     }
                                 } else {
-                                    self
+                                    Self::MultiSelect(MultiSelectContext {
+                                        origin: mouse_position,
+                                    })
                                 }
                             }
                             MouseButton::Right => {
@@ -534,6 +591,96 @@ impl UIState {
                         UIState::None
                     }
                     _ => UIState::None,
+                },
+            },
+            UIState::MultiSelect(ctx) => match event {
+                UIEvent::KeyboardInput { .. } => self,
+                UIEvent::MouseMoved(_) => self,
+                UIEvent::MouseInput { state, button } => match (state, button) {
+                    (ElementState::Released, MouseButton::Left) => {
+                        UIState::MultiMove(MultiMoveContext {
+                            selected: {
+                                let x = ctx.origin.x as f32;
+                                let y = ctx.origin.y as f32;
+                                let x2 = context.mouse_position.x as f32;
+                                let y2 = context.mouse_position.y as f32;
+                                let width = x2 - x;
+                                let height = y2 - y;
+                                let bounds = solstice_2d::Rectangle {
+                                    x,
+                                    y,
+                                    width,
+                                    height,
+                                };
+
+                                graph
+                                    .metadata()
+                                    .iter()
+                                    .filter_map(|(id, metadata)| {
+                                        let node_bounds: solstice_2d::Rectangle = metadata.into();
+                                        if rects_collide(&bounds, &node_bounds) {
+                                            Some(id)
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .collect()
+                            },
+                            moving: false,
+                        })
+                    }
+                    _ => self,
+                },
+            },
+            UIState::MultiMove(ref mut ctx) => match event {
+                UIEvent::KeyboardInput { state, key_code } => match (state, key_code) {
+                    (ElementState::Pressed, glutin::event::VirtualKeyCode::Delete) => {
+                        for node in ctx.selected.iter().copied() {
+                            graph.remove_node(node);
+                        }
+                        UIState::None
+                    }
+                    _ => self,
+                },
+                UIEvent::MouseMoved(position) => {
+                    if ctx.moving {
+                        let dx = mouse_position.x - position.x;
+                        let dy = mouse_position.y - position.y;
+
+                        for node in ctx.selected.iter().copied() {
+                            if let Some(metadata) = graph.metadata_mut(node) {
+                                metadata.position.x -= dx as f32;
+                                metadata.position.y -= dy as f32;
+                            }
+                        }
+                    }
+                    self
+                }
+                UIEvent::MouseInput { state, button } => match (state, button) {
+                    (ElementState::Pressed, MouseButton::Left) => {
+                        let mx = mouse_position.x as f32;
+                        let my = mouse_position.y as f32;
+                        let should_move = ctx
+                            .selected
+                            .iter()
+                            .copied()
+                            .filter_map(|node| graph.metadata().get(node))
+                            .any(|metadata| {
+                                let bounds = metadata.into();
+                                rect_contains(&bounds, mx, my)
+                            });
+                        if should_move {
+                            ctx.moving = true;
+                            self
+                        } else {
+                            UIState::None
+                        }
+                    }
+                    (ElementState::Released, MouseButton::Left) => {
+                        ctx.moving = false;
+                        self
+                    }
+                    _ => self,
                 },
             },
         }

@@ -31,6 +31,13 @@ pub fn rect_contains(rect: &Rectangle, x: f32, y: f32) -> bool {
     x > x1 && x < x2 && y > y1 && y < y2
 }
 
+pub fn rects_collide(a: &Rectangle, b: &Rectangle) -> bool {
+    rect_contains(a, b.x, b.y)
+        || rect_contains(a, b.x + b.width, b.y)
+        || rect_contains(a, b.x + b.width, b.y + b.height)
+        || rect_contains(a, b.x, b.y + b.height)
+}
+
 pub fn rect_center(rect: &Rectangle) -> Position {
     Position {
         x: rect.x + rect.width / 2.,
@@ -141,6 +148,11 @@ impl UIGraph {
 
     pub fn node_mut(&mut self, id: NodeID) -> Option<&mut dyn ::nodes::Node> {
         self.inner.node_mut(id)
+    }
+
+    pub fn remove_node(&mut self, id: NodeID) -> Option<Box<dyn ::nodes::Node>> {
+        self.metadata.remove(id);
+        self.inner.remove_node(id)
     }
 
     pub fn root(&self) -> NodeID {

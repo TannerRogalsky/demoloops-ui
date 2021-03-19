@@ -416,6 +416,11 @@ impl Graph {
         self.nodes.insert(node)
     }
 
+    pub fn remove_node(&mut self, id: NodeID) -> Option<Box<dyn Node>> {
+        self.connections.retain(|c| c.from != id && c.to != id);
+        self.nodes.remove(id)
+    }
+
     pub fn connect(&mut self, from: NodeID, to: NodeID, input: usize) {
         let not_same_input = |c: &Connection| c.to != to || c.input != input;
         self.connections.retain(not_same_input);
