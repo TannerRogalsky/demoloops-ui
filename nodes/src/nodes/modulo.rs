@@ -1,118 +1,20 @@
-use crate::{FromAny, InputGroup, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
+use crate::generic::GenericPair;
+use crate::{FromAny, Node, NodeInput, NodeOutput, PossibleInputs};
 use std::any::Any;
 
-struct ModuloGroup<X, Y> {
-    numerator: OneOrMany<X>,
-    denominator: OneOrMany<Y>,
+enum ModuloGroup {
+    F32(GenericPair<f32, f32>),
+    U32(GenericPair<u32, u32>),
 }
 
-impl<X, Y> FromAny for ModuloGroup<X, Y>
-where
-    X: 'static,
-    Y: 'static,
-{
-    fn from_any(inputs: &mut Vec<Box<dyn Any>>) -> Result<Self, ()> {
-        if inputs.len() < 2 {
-            return Err(());
-        }
-
-        let valid = OneOrMany::<X>::is(&*inputs[0]) && OneOrMany::<Y>::is(&*inputs[1]);
-
-        if !valid {
-            return Err(());
-        }
-
-        fn take<T: 'static>(v: Box<dyn Any>) -> OneOrMany<T> {
-            OneOrMany::<T>::downcast(v).unwrap()
-        }
-
-        let mut inputs = inputs.drain(0..2);
-        let numerator = take(inputs.next().unwrap());
-        let denominator = take(inputs.next().unwrap());
-        Ok(Self {
-            numerator,
-            denominator,
-        })
-    }
-}
-
-macro_rules! group_impl {
-    ($x: ty, $y: ty) => {
-        impl ModuloGroup<$x, $y> {
-            fn gen_groups() -> Vec<InputGroup<'static>> {
-                use crate::InputInfo;
-                use itertools::Itertools;
-
-                let lhs = OneOrMany::<$x>::type_ids();
-                let rhs = OneOrMany::<$y>::type_ids();
-                let groups = std::array::IntoIter::new(lhs)
-                    .cartesian_product(std::array::IntoIter::new(rhs))
-                    .map(|(lhs, rhs)| InputGroup {
-                        info: vec![
-                            InputInfo {
-                                name: "numerator",
-                                ty_name: stringify!($x),
-                                type_id: lhs,
-                            },
-                            InputInfo {
-                                name: "denominator",
-                                ty_name: stringify!($y),
-                                type_id: rhs,
-                            },
-                        ]
-                        .into(),
-                    })
-                    .collect::<Vec<_>>();
-                groups
-            }
-
-            fn types() -> &'static [InputGroup<'static>] {
-                use once_cell::sync::Lazy;
-
-                static GROUPS: Lazy<Vec<InputGroup<'static>>> =
-                    Lazy::new(ModuloGroup::<$x, $y>::gen_groups);
-                &*GROUPS
-            }
-        }
-    };
-}
-
-impl ModuloGroup<u32, u32> {
-    pub fn op(self) -> Box<dyn Any> {
-        use crate::one_many::op2;
-        let result = op2(self.numerator, self.denominator, |num, den| {
-            if den == 0 {
-                0
-            } else {
-                num % den
-            }
-        });
-        match result {
-            OneOrMany::One(v) => Box::new(v),
-            OneOrMany::Many(v) => Box::new(v),
+impl ModuloGroup {
+    fn op(self) -> Box<dyn Any> {
+        match self {
+            ModuloGroup::F32(v) => v.op(std::ops::Rem::rem),
+            ModuloGroup::U32(v) => v.op(std::ops::Rem::rem),
         }
     }
 }
-
-impl ModuloGroup<f32, f32> {
-    pub fn op(self) -> Box<dyn Any> {
-        use crate::one_many::op2;
-        let result = op2(self.numerator, self.denominator, |num, den| {
-            if den == 0. {
-                0.
-            } else {
-                num % den
-            }
-        });
-        match result {
-            OneOrMany::One(v) => Box::new(v),
-            OneOrMany::Many(v) => Box::new(v),
-        }
-    }
-}
-
-group_impl!(u32, u32);
-group_impl!(f32, f32);
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct ModuloNode;
@@ -120,9 +22,9 @@ pub struct ModuloNode;
 impl NodeInput for ModuloNode {
     fn inputs(&self) -> PossibleInputs {
         use once_cell::sync::Lazy;
-        static GROUPS: Lazy<Vec<InputGroup>> = Lazy::new(|| {
-            let float = ModuloGroup::<f32, f32>::types();
-            let unsigned = ModuloGroup::<u32, u32>::types();
+        static GROUPS: Lazy<Vec<crate::InputGroup>> = Lazy::new(|| {
+            let float = GenericPair::<f32, f32>::gen_groups("numerator", "denominator");
+            let unsigned = GenericPair::<u32, u32>::gen_groups("numerator", "denominator");
             let mut groups = vec![];
             groups.extend_from_slice(&float);
             groups.extend_from_slice(&unsigned);
@@ -134,10 +36,10 @@ impl NodeInput for ModuloNode {
 
 impl NodeOutput for ModuloNode {
     fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
-        if let Ok(output) = ModuloGroup::<f32, f32>::from_any(inputs) {
-            Ok(output.op())
-        } else if let Ok(output) = ModuloGroup::<u32, u32>::from_any(inputs) {
-            Ok(output.op())
+        if let Ok(output) = GenericPair::<f32, f32>::from_any(inputs) {
+            Ok(ModuloGroup::F32(output).op())
+        } else if let Ok(output) = GenericPair::<u32, u32>::from_any(inputs) {
+            Ok(ModuloGroup::U32(output).op())
         } else {
             Err(())
         }
