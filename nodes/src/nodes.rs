@@ -1,3 +1,4 @@
+mod add;
 mod constant;
 mod division;
 mod global;
@@ -8,6 +9,7 @@ mod ratio;
 mod sin_cos;
 mod to_float;
 
+pub use add::AddNode;
 pub use constant::ConstantNode;
 pub use division::DivisionNode;
 pub use global::GlobalNode;

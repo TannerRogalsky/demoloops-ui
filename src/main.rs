@@ -189,6 +189,7 @@ const POSSIBLE_NODES: once_cell::sync::Lazy<Vec<Box<dyn Node>>> =
         vec![
             Box::new(::nodes::ConstantNode::Unsigned(0)),
             Box::new(::nodes::GlobalNode),
+            Box::new(::nodes::AddNode),
             Box::new(::nodes::MultiplyNode),
             Box::new(::nodes::DivisionNode),
             Box::new(::nodes::ModuloNode),
