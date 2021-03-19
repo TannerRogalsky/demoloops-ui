@@ -1,8 +1,9 @@
 use crate::{FromAny, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
 use std::any::Any;
 
-struct Input {
-    inner: OneOrMany<f32>,
+enum Input {
+    F32(OneOrMany<f32>),
+    U32(OneOrMany<u32>),
 }
 
 impl FromAny for Input {
@@ -10,7 +11,10 @@ impl FromAny for Input {
         if let Some(input) = inputs.get(0) {
             if OneOrMany::<f32>::is(&**input) {
                 let inner = OneOrMany::<f32>::downcast(inputs.remove(0)).unwrap();
-                Ok(Self { inner })
+                Ok(Self::F32(inner))
+            } else if OneOrMany::<u32>::is(&**input) {
+                let inner = OneOrMany::<u32>::downcast(inputs.remove(0)).unwrap();
+                Ok(Self::U32(inner))
             } else {
                 Err(())
             }
@@ -25,14 +29,14 @@ impl Input {
         use crate::InputGroup;
         use once_cell::sync::Lazy;
         static GROUPS: Lazy<Vec<InputGroup>> = Lazy::new(|| {
-            let types = OneOrMany::<f32>::type_ids();
-            std::array::IntoIter::new(types)
+            std::array::IntoIter::new(OneOrMany::<f32>::type_ids())
+                .chain(std::array::IntoIter::new(OneOrMany::<u32>::type_ids()))
                 .map(|type_id| {
                     use crate::InputInfo;
                     InputGroup {
                         info: vec![InputInfo {
-                            name: "f32",
-                            ty_name: "f32",
+                            name: "number",
+                            ty_name: "number",
                             type_id,
                         }]
                         .into(),
@@ -45,16 +49,18 @@ impl Input {
     }
 
     fn sin(self) -> Box<dyn Any> {
-        match crate::one_many::op1(self.inner, f32::sin) {
-            OneOrMany::One(v) => Box::new(v),
-            OneOrMany::Many(v) => Box::new(v),
+        use crate::one_many::op1;
+        match self {
+            Input::F32(inner) => op1(inner, f32::sin).into_boxed_inner(),
+            Input::U32(inner) => op1(inner, |v| (v as f32).sin()).into_boxed_inner(),
         }
     }
 
     fn cos(self) -> Box<dyn Any> {
-        match crate::one_many::op1(self.inner, f32::cos) {
-            OneOrMany::One(v) => Box::new(v),
-            OneOrMany::Many(v) => Box::new(v),
+        use crate::one_many::op1;
+        match self {
+            Input::F32(inner) => op1(inner, f32::cos).into_boxed_inner(),
+            Input::U32(inner) => op1(inner, |v| (v as f32).cos()).into_boxed_inner(),
         }
     }
 }

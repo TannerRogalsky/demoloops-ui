@@ -98,10 +98,7 @@ pub mod generic {
             O: Clone + std::fmt::Debug + 'static,
             FUNC: Fn(LHS, RHS) -> O + 'static + Clone,
         {
-            match crate::one_many::op2(self.lhs, self.rhs, op) {
-                OneOrMany::One(v) => Box::new(v),
-                OneOrMany::Many(v) => Box::new(v),
-            }
+            crate::one_many::op2(self.lhs, self.rhs, op).into_boxed_inner()
         }
     }
 }

@@ -106,7 +106,7 @@ impl Into<Rectangle> for &Metadata {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UIGraph {
     inner: Graph,
     metadata: slotmap::SecondaryMap<NodeID, Metadata>,

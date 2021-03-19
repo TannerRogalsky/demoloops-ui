@@ -133,6 +133,13 @@ impl<T: 'static> OneOrMany<T> {
             TypeId::of::<Many<T>>(),
         ]
     }
+
+    pub fn into_boxed_inner(self) -> Box<dyn Any> {
+        match self {
+            OneOrMany::One(inner) => Box::new(inner),
+            OneOrMany::Many(inner) => Box::new(inner),
+        }
+    }
 }
 
 impl<T: Clone> Iterator for OneOrMany<T> {
@@ -292,7 +299,15 @@ pub trait NodeOutput {
 }
 
 #[typetag::serde(tag = "type")]
-pub trait Node: std::fmt::Debug + dyn_clone::DynClone + NodeInput + NodeOutput + Any {
+pub trait Node:
+    std::fmt::Debug
+    + dyn_clone::DynClone
+    + NodeInput
+    + NodeOutput
+    + Any
+    + Send
+    + std::panic::RefUnwindSafe
+{
     fn name(&self) -> &'static str;
 }
 dyn_clone::clone_trait_object!(Node);
