@@ -522,6 +522,39 @@ mod tests {
     use super::*;
 
     #[test]
+    fn chain_test() {
+        let x = OneOrMany::Many(Many::from(0u32..3));
+        let y = OneOrMany::Many(Many::from(3u32..6));
+
+        fn repeat(count: u32, v: OneOrMany<u32>) -> Many<u32> {
+            match v {
+                OneOrMany::One(v) => Many::from((0..count).map(move |_| v.0)),
+                OneOrMany::Many(v) => {
+                    Many::from((0..count).flat_map(move |r| v.0.clone().map(move |_| r)))
+                }
+            }
+        }
+
+        fn range(count: OneOrMany<u32>) -> Many<u32> {
+            match count {
+                OneOrMany::One(count) => Many::from(0..count.0),
+                OneOrMany::Many(count) => {
+                    Many::from(count.0.clone().flat_map(move |_| count.0.clone()))
+                }
+            }
+        }
+
+        let x = repeat(3, x);
+        let y = range(y);
+        let v = x.inner().zip(y.inner()).collect::<Vec<_>>();
+
+        let control = (0u32..3)
+            .flat_map(|x| (3u32..6).map(move |y| (x, y)))
+            .collect::<Vec<_>>();
+        assert_eq!(control, v);
+    }
+
+    #[test]
     fn one_or_many() {
         {
             let a = OneOrMany::One(One::new(2u32));
@@ -675,14 +708,13 @@ mod tests {
             let mut graph = Graph::with_root(RatioNode);
             let width = graph.add_node(ConstantNode::Unsigned(WIDTH));
             let height = graph.add_node(ConstantNode::Unsigned(HEIGHT));
-            let index = graph.add_node(Range2DNode);
+            let index = graph.add_node(RangeNode);
             let total = graph.add_node(MultiplyNode);
-
-            graph.connect(width, index, 0);
-            graph.connect(height, index, 1);
 
             graph.connect(width, total, 0);
             graph.connect(height, total, 1);
+
+            graph.connect(total, index, 0);
 
             graph.connect(index, graph.root, 0);
             graph.connect(total, graph.root, 1);

@@ -70,17 +70,3 @@ impl Node for DivisionNode {
         "division"
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn inputs() {
-        let inputs = GenericPair::<f32, f32>::gen_groups();
-        assert_eq!(9, inputs.len());
-
-        let inputs = DivisionNode.inputs();
-        assert_eq!(18, inputs.groups.len());
-    }
-}

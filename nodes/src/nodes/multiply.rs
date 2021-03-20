@@ -76,7 +76,7 @@ mod tests {
 
     #[test]
     fn inputs() {
-        let inputs = GenericPair::<f32, f32>::gen_groups();
+        let inputs = GenericPair::<f32, f32>::gen_groups("", "");
         assert_eq!(9, inputs.len());
 
         let inputs = MultiplyNode.inputs();

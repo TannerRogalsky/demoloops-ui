@@ -68,6 +68,21 @@ fn main() {
     let mut show_graph = true;
     let mut times = std::collections::VecDeque::with_capacity(60);
 
+    let _execution_thread_handle = std::thread::spawn({
+        let graph = graph.clone();
+        move || {
+            loop {
+                let _r = std::panic::catch_unwind(|| {
+                    // let mut guard = graph.lock().unwrap();
+                    match graph.clone().execute() {
+                        Ok(_) => {}
+                        Err(_) => {}
+                    }
+                });
+            }
+        }
+    });
+
     event_loop.run(move |event, _target, control_flow| {
         use glutin::{event::*, event_loop::*};
         match event {
@@ -150,9 +165,14 @@ fn main() {
                         times.pop_front();
                     }
                     times.push_back(elapsed);
-                    if let Ok(output) = result {
-                        let dl = output.downcast::<One<DrawList>>().unwrap();
-                        ctx2d.process(&mut ctx, &dl.inner());
+                    match result {
+                        Ok(output) => {
+                            let dl = output.downcast::<One<DrawList>>().unwrap();
+                            ctx2d.process(&mut ctx, &dl.inner());
+                        }
+                        Err(_err) => {
+                            // eprintln!("{:?}", err);
+                        }
                     }
                 }
 
@@ -194,7 +214,7 @@ const POSSIBLE_NODES: once_cell::sync::Lazy<Vec<Box<dyn Node>>> =
             Box::new(::nodes::DivisionNode),
             Box::new(::nodes::ModuloNode),
             Box::new(::nodes::RangeNode),
-            Box::new(::nodes::Range2DNode),
+            Box::new(::nodes::RepeatNode),
             Box::new(::nodes::RatioNode),
             Box::new(::nodes::SineNode),
             Box::new(::nodes::CosNode),
