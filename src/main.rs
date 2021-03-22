@@ -225,13 +225,13 @@ const POSSIBLE_NODES: once_cell::sync::Lazy<Vec<Box<dyn Node>>> =
         ]
     });
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 enum Action {
     Move,
     Resize,
-    Edit,
+    Edit { buffer: String },
 }
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 struct ActionContext {
     node_id: NodeID,
     action: Action,
@@ -432,7 +432,9 @@ impl UIState {
                                         *node = ConstantNode::Unsigned(0);
                                         Self::NodeAction(ActionContext {
                                             node_id,
-                                            action: Action::Edit,
+                                            action: Action::Edit {
+                                                buffer: String::new(),
+                                            },
                                         })
                                     } else {
                                         self
@@ -459,10 +461,10 @@ impl UIState {
                 },
                 UIEvent::MouseMoved(_) => self,
             },
-            UIState::NodeAction(action) => match event {
+            UIState::NodeAction(mut action) => match event {
                 UIEvent::KeyboardInput { state, key_code } => {
-                    match action.action {
-                        Action::Edit => match state {
+                    match &mut action.action {
+                        Action::Edit { buffer } => match state {
                             ElementState::Pressed => {
                                 use glutin::event::VirtualKeyCode;
                                 let new_char = match key_code {
@@ -480,20 +482,18 @@ impl UIState {
                                     VirtualKeyCode::Return | VirtualKeyCode::Escape => {
                                         return UIState::None;
                                     }
-                                    _ => return self,
+                                    _ => {
+                                        return UIState::NodeAction(action);
+                                    }
                                 };
                                 let node = graph
                                     .node_mut(action.node_id)
                                     .and_then(|n| n.downcast_mut::<ConstantNode>());
                                 if let (Some(new_char), Some(node)) = (new_char, node) {
-                                    let mut current = match node {
-                                        ConstantNode::Unsigned(v) => v.to_string(),
-                                        ConstantNode::Float(v) => v.to_string(),
-                                    };
-                                    current.push(new_char);
-                                    if let Ok(v) = current.parse::<u32>() {
+                                    buffer.push(new_char);
+                                    if let Ok(v) = buffer.parse::<u32>() {
                                         *node = ConstantNode::Unsigned(v);
-                                    } else if let Ok(v) = current.parse::<f32>() {
+                                    } else if let Ok(v) = buffer.parse::<f32>() {
                                         *node = ConstantNode::Float(v);
                                     }
                                 }
@@ -502,20 +502,20 @@ impl UIState {
                         },
                         _ => {}
                     }
-                    self
+                    UIState::NodeAction(action)
                 }
                 UIEvent::MouseInput { state, .. } => match state {
-                    ElementState::Pressed => self,
+                    ElementState::Pressed => UIState::NodeAction(action),
                     ElementState::Released => match action.action {
                         Action::Move | Action::Resize => UIState::None,
-                        Action::Edit => self,
+                        Action::Edit { .. } => UIState::NodeAction(action),
                     },
                 },
                 UIEvent::MouseMoved(position) => {
                     let delta_x = position.x - mouse_position.x;
                     let delta_y = position.y - mouse_position.y;
                     let node_id = action.node_id;
-                    match action.action {
+                    match &action.action {
                         Action::Move => {
                             if let Some(selected) = graph.metadata_mut(node_id) {
                                 selected.position.x += delta_x as f32;
@@ -528,9 +528,9 @@ impl UIState {
                                 selected.dimensions.height += delta_y as f32;
                             }
                         }
-                        Action::Edit => {}
+                        Action::Edit { .. } => {}
                     }
-                    self
+                    UIState::NodeAction(action)
                 }
             },
             UIState::NewNode(ctx) => match event {
