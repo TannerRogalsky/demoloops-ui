@@ -239,7 +239,7 @@ impl UIGraph {
                                 format!("{}", v)
                             }
                             ConstantNode::Float(v) => {
-                                format!("{:.1}", v)
+                                format!("{:.2}", v)
                             }
                         };
                         let bounds = Rectangle {

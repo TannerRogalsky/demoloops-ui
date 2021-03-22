@@ -17,7 +17,7 @@ fn main() {
     let mut ctx2d = solstice_2d::Graphics::new(&mut ctx, width, height).unwrap();
 
     let resources_folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("resources");
-    let graph_path = resources_folder.join("graph.json");
+    let graph_path = resources_folder.join("graph4.json");
 
     let font = ab_glyph::FontVec::try_from_vec({
         let path = resources_folder.join("Roboto-Regular.ttf");
@@ -222,6 +222,7 @@ const POSSIBLE_NODES: once_cell::sync::Lazy<Vec<Box<dyn Node>>> =
             Box::new(ColorNode),
             Box::new(HSLNode),
             Box::new(RectangleNode),
+            Box::new(RegularPolygonNode),
             Box::new(DrawNode),
         ]
     });
@@ -468,19 +469,22 @@ impl UIState {
                         Action::Edit { buffer } => match state {
                             ElementState::Pressed => {
                                 use glutin::event::VirtualKeyCode;
-                                let new_char = match key_code {
-                                    VirtualKeyCode::Key1 => Some('1'),
-                                    VirtualKeyCode::Key2 => Some('2'),
-                                    VirtualKeyCode::Key3 => Some('3'),
-                                    VirtualKeyCode::Key4 => Some('4'),
-                                    VirtualKeyCode::Key5 => Some('5'),
-                                    VirtualKeyCode::Key6 => Some('6'),
-                                    VirtualKeyCode::Key7 => Some('7'),
-                                    VirtualKeyCode::Key8 => Some('8'),
-                                    VirtualKeyCode::Key9 => Some('9'),
-                                    VirtualKeyCode::Key0 => Some('0'),
-                                    VirtualKeyCode::Period => Some('.'),
-                                    VirtualKeyCode::Minus => Some('-'),
+                                match key_code {
+                                    VirtualKeyCode::Key1 => buffer.push('1'),
+                                    VirtualKeyCode::Key2 => buffer.push('2'),
+                                    VirtualKeyCode::Key3 => buffer.push('3'),
+                                    VirtualKeyCode::Key4 => buffer.push('4'),
+                                    VirtualKeyCode::Key5 => buffer.push('5'),
+                                    VirtualKeyCode::Key6 => buffer.push('6'),
+                                    VirtualKeyCode::Key7 => buffer.push('7'),
+                                    VirtualKeyCode::Key8 => buffer.push('8'),
+                                    VirtualKeyCode::Key9 => buffer.push('9'),
+                                    VirtualKeyCode::Key0 => buffer.push('0'),
+                                    VirtualKeyCode::Period => buffer.push('.'),
+                                    VirtualKeyCode::Minus => buffer.push('-'),
+                                    VirtualKeyCode::Back => {
+                                        buffer.pop();
+                                    }
                                     VirtualKeyCode::Return | VirtualKeyCode::Escape => {
                                         return UIState::None;
                                     }
@@ -491,12 +495,13 @@ impl UIState {
                                 let node = graph
                                     .node_mut(action.node_id)
                                     .and_then(|n| n.downcast_mut::<ConstantNode>());
-                                if let (Some(new_char), Some(node)) = (new_char, node) {
-                                    buffer.push(new_char);
+                                if let Some(node) = node {
                                     if let Ok(v) = buffer.parse::<u32>() {
                                         *node = ConstantNode::Unsigned(v);
                                     } else if let Ok(v) = buffer.parse::<f32>() {
                                         *node = ConstantNode::Float(v);
+                                    } else {
+                                        *node = ConstantNode::Unsigned(0);
                                     }
                                 }
                             }
