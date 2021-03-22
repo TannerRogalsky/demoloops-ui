@@ -432,8 +432,12 @@ impl Graph {
     }
 
     pub fn remove_node(&mut self, id: NodeID) -> Option<Box<dyn Node>> {
-        self.connections.retain(|c| c.from != id && c.to != id);
-        self.nodes.remove(id)
+        if id == self.root {
+            None
+        } else {
+            self.connections.retain(|c| c.from != id && c.to != id);
+            self.nodes.remove(id)
+        }
     }
 
     pub fn connect(&mut self, from: NodeID, to: NodeID, input: usize) {

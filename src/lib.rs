@@ -151,8 +151,11 @@ impl UIGraph {
     }
 
     pub fn remove_node(&mut self, id: NodeID) -> Option<Box<dyn ::nodes::Node>> {
-        self.metadata.remove(id);
-        self.inner.remove_node(id)
+        let removed = self.inner.remove_node(id);
+        if removed.is_some() {
+            self.metadata.remove(id);
+        }
+        removed
     }
 
     pub fn root(&self) -> NodeID {
