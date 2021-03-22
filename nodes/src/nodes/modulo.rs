@@ -11,7 +11,7 @@ impl ModuloGroup {
     fn op(self) -> Box<dyn Any> {
         match self {
             ModuloGroup::F32(v) => v.op(std::ops::Rem::rem),
-            ModuloGroup::U32(v) => v.op(std::ops::Rem::rem),
+            ModuloGroup::U32(v) => v.op(|lhs, rhs| lhs.checked_rem(rhs).unwrap_or(0)),
         }
     }
 }

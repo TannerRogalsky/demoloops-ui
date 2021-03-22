@@ -14,8 +14,12 @@ impl RatioGroup {
                 remainder / length
             }),
             RatioGroup::U32(v) => v.op(|count, length| {
-                let remainder = count % length;
-                (remainder as f64 / length as f64) as f32
+                if length == 0 {
+                    0.
+                } else {
+                    let remainder = count % length;
+                    (remainder as f64 / length as f64) as f32
+                }
             }),
         }
     }

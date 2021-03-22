@@ -11,7 +11,7 @@ impl DivisionNodeInput {
     fn op(self) -> Box<dyn Any> {
         match self {
             DivisionNodeInput::F32(group) => group.op(std::ops::Div::div),
-            DivisionNodeInput::U32(group) => group.op(std::ops::Div::div),
+            DivisionNodeInput::U32(group) => group.op(|lhs, rhs| lhs.checked_div(rhs).unwrap_or(0)),
         }
     }
 
