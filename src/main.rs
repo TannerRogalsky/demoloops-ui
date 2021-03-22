@@ -220,6 +220,7 @@ const POSSIBLE_NODES: once_cell::sync::Lazy<Vec<Box<dyn Node>>> =
             Box::new(::nodes::CosNode),
             Box::new(::nodes::ToFloatNode),
             Box::new(ColorNode),
+            Box::new(HSLNode),
             Box::new(RectangleNode),
             Box::new(DrawNode),
         ]
@@ -479,6 +480,7 @@ impl UIState {
                                     VirtualKeyCode::Key9 => Some('9'),
                                     VirtualKeyCode::Key0 => Some('0'),
                                     VirtualKeyCode::Period => Some('.'),
+                                    VirtualKeyCode::Minus => Some('-'),
                                     VirtualKeyCode::Return | VirtualKeyCode::Escape => {
                                         return UIState::None;
                                     }
