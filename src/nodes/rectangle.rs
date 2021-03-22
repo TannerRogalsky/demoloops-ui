@@ -2,6 +2,7 @@ use nodes::{InputGroup, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
 use solstice_2d::Rectangle;
 use std::any::Any;
 
+#[derive(Debug)]
 struct RectangleInput<X, Y, W, H> {
     x: OneOrMany<X>,
     y: OneOrMany<Y>,
@@ -108,11 +109,7 @@ macro_rules! group_impl {
 impl RectangleInput<f32, f32, f32, f32> {
     fn op(self) -> Box<dyn Any> {
         use ::nodes::one_many::op4;
-        let result = op4(self.x, self.y, self.width, self.height, Rectangle::new);
-        match result {
-            OneOrMany::One(v) => Box::new(v),
-            OneOrMany::Many(v) => Box::new(v),
-        }
+        op4(self.x, self.y, self.width, self.height, Rectangle::new).into_boxed_inner()
     }
 }
 group_impl!(f32, f32, f32, f32);

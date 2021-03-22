@@ -31,8 +31,15 @@ impl DrawNodeInput {
 
     fn op(self) -> Box<dyn Any> {
         let mut dl = solstice_2d::DrawList::default();
-        for (geometry, color) in self.geometry.zip(self.color) {
-            dl.draw_with_color(geometry, color);
+        match (self.geometry, self.color) {
+            (OneOrMany::One(geometry), OneOrMany::One(color)) => {
+                dl.draw_with_color(geometry.inner(), color.inner());
+            }
+            (geometry, color) => {
+                for (geometry, color) in geometry.zip(color) {
+                    dl.draw_with_color(geometry, color);
+                }
+            }
         }
         Box::new(nodes::One::new(dl))
     }
