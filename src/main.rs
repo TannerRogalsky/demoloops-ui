@@ -428,15 +428,18 @@ impl UIState {
                                     } else if rect_contains(&metadata.output(), x, y) {
                                         Self::NewConnection(NewConnectionContext { from: node_id })
                                     } else if let Some(node) = graph
-                                        .node_mut(node_id)
-                                        .and_then(|n| n.downcast_mut::<ConstantNode>())
+                                        .inner()
+                                        .nodes()
+                                        .get(node_id)
+                                        .and_then(|n| n.downcast_ref::<ConstantNode>())
                                     {
-                                        *node = ConstantNode::Unsigned(0);
+                                        let buffer = match node {
+                                            ConstantNode::Unsigned(v) => v.to_string(),
+                                            ConstantNode::Float(v) => v.to_string(),
+                                        };
                                         Self::NodeAction(ActionContext {
                                             node_id,
-                                            action: Action::Edit {
-                                                buffer: String::new(),
-                                            },
+                                            action: Action::Edit { buffer },
                                         })
                                     } else {
                                         self
