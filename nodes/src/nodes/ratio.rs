@@ -1,26 +1,32 @@
-use crate::{generic::GenericPair, FromAny, Node, NodeInput, NodeOutput, PossibleInputs};
+use crate::{FromAny, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
 use std::any::Any;
 
+type F32F32 = (OneOrMany<f32>, OneOrMany<f32>);
+type U32U32 = (OneOrMany<u32>, OneOrMany<u32>);
+
 enum RatioGroup {
-    F32(GenericPair<f32, f32>),
-    U32(GenericPair<u32, u32>),
+    F32(F32F32),
+    U32(U32U32),
 }
 
 impl RatioGroup {
     fn op(self) -> Box<dyn Any> {
+        use crate::one_many::op2_tuple;
         match self {
-            RatioGroup::F32(v) => v.op(|count, length| {
+            RatioGroup::F32(v) => op2_tuple(v, |count, length| {
                 let remainder = count % length;
                 remainder / length
-            }),
-            RatioGroup::U32(v) => v.op(|count, length| {
+            })
+            .into_boxed_inner(),
+            RatioGroup::U32(v) => op2_tuple(v, |count, length| {
                 if length == 0 {
                     0.
                 } else {
                     let remainder = count % length;
                     (remainder as f64 / length as f64) as f32
                 }
-            }),
+            })
+            .into_boxed_inner(),
         }
     }
 }
@@ -32,12 +38,13 @@ impl NodeInput for RatioNode {
     fn inputs(&self) -> PossibleInputs {
         use once_cell::sync::Lazy;
         static GROUPS: Lazy<Vec<crate::InputGroup>> = Lazy::new(|| {
-            let float = GenericPair::<f32, f32>::gen_groups("numerator", "denominator");
-            let unsigned = GenericPair::<u32, u32>::gen_groups("numerator", "denominator");
-            let mut groups = vec![];
-            groups.extend_from_slice(&float);
-            groups.extend_from_slice(&unsigned);
-            groups
+            use crate::InputSupplemental;
+            let float = F32F32::types(&["numerator", "denominator"]);
+            let unsigned = U32U32::types(&["numerator", "denominator"]);
+            let mut acc = vec![];
+            acc.extend(float);
+            acc.extend(unsigned);
+            acc
         });
         PossibleInputs { groups: &*GROUPS }
     }
@@ -45,9 +52,9 @@ impl NodeInput for RatioNode {
 
 impl NodeOutput for RatioNode {
     fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
-        if let Ok(output) = GenericPair::<f32, f32>::from_any(inputs) {
+        if let Ok(output) = F32F32::from_any(inputs) {
             Ok(RatioGroup::F32(output).op())
-        } else if let Ok(output) = GenericPair::<u32, u32>::from_any(inputs) {
+        } else if let Ok(output) = U32U32::from_any(inputs) {
             Ok(RatioGroup::U32(output).op())
         } else {
             Err(())

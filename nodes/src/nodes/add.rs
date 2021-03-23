@@ -1,43 +1,45 @@
-use crate::{generic::GenericPair, FromAny, Node, NodeInput, NodeOutput, PossibleInputs};
+use crate::{FromAny, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
 use std::any::Any;
+
+type F32F32 = (OneOrMany<f32>, OneOrMany<f32>);
+type U32U32 = (OneOrMany<u32>, OneOrMany<u32>);
 
 #[derive(Debug, Clone)]
 enum AddNodeInput {
-    F32(GenericPair<f32, f32>),
-    U32(GenericPair<u32, u32>),
+    F32(F32F32),
+    U32(U32U32),
 }
 
 impl AddNodeInput {
     fn op(self) -> Box<dyn Any> {
+        use crate::one_many::op2_tuple;
         match self {
-            AddNodeInput::F32(group) => group.op(std::ops::Add::add),
-            AddNodeInput::U32(group) => group.op(std::ops::Add::add),
+            AddNodeInput::F32(group) => op2_tuple(group, std::ops::Add::add).into_boxed_inner(),
+            AddNodeInput::U32(group) => op2_tuple(group, std::ops::Add::add).into_boxed_inner(),
         }
     }
 
     fn types() -> PossibleInputs<'static> {
         use once_cell::sync::Lazy;
-        static INPUTS: Lazy<PossibleInputs> = Lazy::new(|| {
-            static GROUPS: Lazy<Vec<crate::InputGroup>> = Lazy::new(|| {
-                let float = GenericPair::<f32, f32>::gen_groups("lhs", "rhs");
-                let unsigned = GenericPair::<u32, u32>::gen_groups("lhs", "rhs");
-                let mut acc = Vec::new();
-                acc.extend_from_slice(&float);
-                acc.extend_from_slice(&unsigned);
-                acc
-            });
-
-            PossibleInputs { groups: &*GROUPS }
+        static GROUPS: Lazy<Vec<crate::InputGroup>> = Lazy::new(|| {
+            use crate::InputSupplemental;
+            let float = F32F32::types(&["lhs", "rhs"]);
+            let unsigned = U32U32::types(&["lhs", "rhs"]);
+            let mut acc = Vec::new();
+            acc.extend(float);
+            acc.extend(unsigned);
+            acc
         });
-        *INPUTS
+
+        PossibleInputs { groups: &*GROUPS }
     }
 }
 
 impl FromAny for AddNodeInput {
     fn from_any(inputs: &mut Vec<Box<dyn Any>>) -> Result<Self, ()> {
-        if let Ok(output) = GenericPair::<f32, f32>::from_any(inputs) {
+        if let Ok(output) = F32F32::from_any(inputs) {
             Ok(AddNodeInput::F32(output))
-        } else if let Ok(output) = GenericPair::<u32, u32>::from_any(inputs) {
+        } else if let Ok(output) = U32U32::from_any(inputs) {
             Ok(AddNodeInput::U32(output))
         } else {
             Err(())

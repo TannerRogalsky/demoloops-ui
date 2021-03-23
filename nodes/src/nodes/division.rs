@@ -1,47 +1,48 @@
-use crate::{generic::GenericPair, FromAny, Node, NodeInput, NodeOutput, PossibleInputs};
+use crate::{FromAny, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
 use std::any::Any;
+
+type F32F32 = (OneOrMany<f32>, OneOrMany<f32>);
+type U32U32 = (OneOrMany<u32>, OneOrMany<u32>);
 
 #[derive(Debug, Clone)]
 enum DivisionNodeInput {
-    F32(GenericPair<f32, f32>),
-    U32(GenericPair<u32, u32>),
+    F32(F32F32),
+    U32(U32U32),
 }
 
 impl DivisionNodeInput {
     fn op(self) -> Box<dyn Any> {
+        use crate::one_many::op2_tuple;
         match self {
-            DivisionNodeInput::F32(group) => group.op(std::ops::Div::div),
-            DivisionNodeInput::U32(group) => group.op(|lhs, rhs| lhs.checked_div(rhs).unwrap_or(0)),
+            DivisionNodeInput::F32(group) => {
+                op2_tuple(group, std::ops::Div::div).into_boxed_inner()
+            }
+            DivisionNodeInput::U32(group) => {
+                op2_tuple(group, |lhs, rhs| lhs.checked_div(rhs).unwrap_or(0)).into_boxed_inner()
+            }
         }
     }
 
     fn types() -> PossibleInputs<'static> {
         use once_cell::sync::Lazy;
-        static INPUTS: Lazy<PossibleInputs> = Lazy::new(|| {
-            use crate::InputGroup;
-            static GROUPS: Lazy<Vec<InputGroup>> = Lazy::new(|| {
-                let float = GenericPair::<f32, f32>::gen_groups("numerator", "denominator");
-                let unsigned = GenericPair::<u32, u32>::gen_groups("numerator", "denominator");
-                let mut acc = Vec::new();
-                acc.extend_from_slice(&float);
-                acc.extend_from_slice(&unsigned);
-                acc
-            });
-
-            PossibleInputs { groups: &*GROUPS }
+        static GROUPS: Lazy<Vec<crate::InputGroup>> = Lazy::new(|| {
+            use crate::InputSupplemental;
+            let float = F32F32::types(&["numerator", "denominator"]);
+            let unsigned = U32U32::types(&["numerator", "denominator"]);
+            let mut acc = Vec::new();
+            acc.extend(float);
+            acc.extend(unsigned);
+            acc
         });
-        *INPUTS
+        PossibleInputs { groups: &*GROUPS }
     }
 }
 
 impl FromAny for DivisionNodeInput {
-    fn from_any(inputs: &mut Vec<Box<dyn Any>>) -> Result<Self, ()>
-    where
-        Self: Sized,
-    {
-        if let Ok(output) = GenericPair::<f32, f32>::from_any(inputs) {
+    fn from_any(inputs: &mut Vec<Box<dyn Any>>) -> Result<Self, ()> {
+        if let Ok(output) = F32F32::from_any(inputs) {
             Ok(DivisionNodeInput::F32(output))
-        } else if let Ok(output) = GenericPair::<u32, u32>::from_any(inputs) {
+        } else if let Ok(output) = U32U32::from_any(inputs) {
             Ok(DivisionNodeInput::U32(output))
         } else {
             Err(())

@@ -1,17 +1,22 @@
-use crate::generic::GenericPair;
-use crate::{FromAny, Node, NodeInput, NodeOutput, PossibleInputs};
+use crate::{FromAny, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
 use std::any::Any;
 
+type F32F32 = (OneOrMany<f32>, OneOrMany<f32>);
+type U32U32 = (OneOrMany<u32>, OneOrMany<u32>);
+
 enum ModuloGroup {
-    F32(GenericPair<f32, f32>),
-    U32(GenericPair<u32, u32>),
+    F32(F32F32),
+    U32(U32U32),
 }
 
 impl ModuloGroup {
     fn op(self) -> Box<dyn Any> {
+        use crate::one_many::op2_tuple;
         match self {
-            ModuloGroup::F32(v) => v.op(std::ops::Rem::rem),
-            ModuloGroup::U32(v) => v.op(|lhs, rhs| lhs.checked_rem(rhs).unwrap_or(0)),
+            ModuloGroup::F32(v) => op2_tuple(v, std::ops::Rem::rem).into_boxed_inner(),
+            ModuloGroup::U32(v) => {
+                op2_tuple(v, |lhs, rhs| lhs.checked_rem(rhs).unwrap_or(0)).into_boxed_inner()
+            }
         }
     }
 }
@@ -23,12 +28,13 @@ impl NodeInput for ModuloNode {
     fn inputs(&self) -> PossibleInputs {
         use once_cell::sync::Lazy;
         static GROUPS: Lazy<Vec<crate::InputGroup>> = Lazy::new(|| {
-            let float = GenericPair::<f32, f32>::gen_groups("numerator", "denominator");
-            let unsigned = GenericPair::<u32, u32>::gen_groups("numerator", "denominator");
-            let mut groups = vec![];
-            groups.extend_from_slice(&float);
-            groups.extend_from_slice(&unsigned);
-            groups
+            use crate::InputSupplemental;
+            let float = F32F32::types(&["numerator", "denominator"]);
+            let unsigned = U32U32::types(&["numerator", "denominator"]);
+            let mut acc = Vec::new();
+            acc.extend(float);
+            acc.extend(unsigned);
+            acc
         });
         PossibleInputs { groups: &*GROUPS }
     }
@@ -36,9 +42,9 @@ impl NodeInput for ModuloNode {
 
 impl NodeOutput for ModuloNode {
     fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
-        if let Ok(output) = GenericPair::<f32, f32>::from_any(inputs) {
+        if let Ok(output) = F32F32::from_any(inputs) {
             Ok(ModuloGroup::F32(output).op())
-        } else if let Ok(output) = GenericPair::<u32, u32>::from_any(inputs) {
+        } else if let Ok(output) = U32U32::from_any(inputs) {
             Ok(ModuloGroup::U32(output).op())
         } else {
             Err(())

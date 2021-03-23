@@ -73,10 +73,26 @@ pub trait FromAny {
         Self: Sized;
 }
 
+pub trait InputSupplemental {
+    fn types(names: &'static [&str]) -> Vec<InputGroup<'static>>;
+}
+
 #[derive(Debug, Clone)]
 pub enum OneOrMany<T> {
     One(One<T>),
     Many(Many<T>),
+}
+
+impl<T> std::cmp::PartialEq for OneOrMany<T>
+where
+    T: std::cmp::PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (OneOrMany::One(lhs), OneOrMany::One(rhs)) => lhs.eq(rhs),
+            (_, _) => false,
+        }
+    }
 }
 
 impl<T: 'static> FromAny for OneOrMany<T> {
@@ -179,6 +195,16 @@ pub mod one_many {
             (OneOrMany::One(a), OneOrMany::One(b)) => OneOrMany::One(One(op(a.0, b.0))),
             (a, b) => OneOrMany::Many(Many::from(a.zip(b).map(move |(a, b)| op(a, b)))),
         }
+    }
+
+    pub fn op2_tuple<A, B, O, FUNC>((a, b): (OneOrMany<A>, OneOrMany<B>), op: FUNC) -> OneOrMany<O>
+    where
+        A: Clone + std::fmt::Debug + 'static,
+        B: Clone + std::fmt::Debug + 'static,
+        O: Clone + std::fmt::Debug + 'static,
+        FUNC: Fn(A, B) -> O + 'static + Clone,
+    {
+        op2(a, b, op)
     }
 
     pub fn op3<A, B, C, O, FUNC>(
