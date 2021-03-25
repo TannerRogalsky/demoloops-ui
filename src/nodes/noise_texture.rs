@@ -2,18 +2,21 @@ use nodes::{Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
 use solstice_2d::PerlinTextureSettings;
 use std::any::Any;
 
-type NoiseTextureInput = (OneOrMany<u32>, OneOrMany<u32>);
+type NoiseTextureInput = (OneOrMany<u32>, OneOrMany<u32>, OneOrMany<u32>);
 
-fn op((width, height): NoiseTextureInput) -> Box<dyn Any> {
-    nodes::one_many::op2(width, height, |width, height| PerlinTextureSettings {
-        seed: 0,
-        width: width as _,
-        height: height as _,
-        period: 0,
-        levels: 0,
-        attenuation: std::convert::TryInto::try_into(0f32).unwrap(),
-        color: false,
-    }).into_boxed_inner()
+fn op((seed, width, height): NoiseTextureInput) -> Box<dyn Any> {
+    nodes::one_many::op3(seed, width, height, |seed, width, height| {
+        PerlinTextureSettings {
+            seed: seed as _,
+            width: width as _,
+            height: height as _,
+            period: width / 2,
+            levels: 2,
+            attenuation: std::convert::TryInto::try_into(0f32).unwrap(),
+            color: true,
+        }
+    })
+    .into_boxed_inner()
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -24,7 +27,7 @@ impl NodeInput for NoiseTextureNode {
         use nodes::InputSupplemental;
         use once_cell::sync::Lazy;
         static GROUPS: Lazy<Vec<nodes::InputGroup<'static>>> =
-            Lazy::new(|| NoiseTextureInput::types(&["width", "height"]));
+            Lazy::new(|| NoiseTextureInput::types(&["seed", "width", "height"]));
         PossibleInputs { groups: &*GROUPS }
     }
 }

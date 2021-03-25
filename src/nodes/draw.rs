@@ -1,5 +1,5 @@
 use nodes::{InputGroup, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
-use solstice_2d::{Color, Draw, Rectangle, RegularPolygon};
+use solstice_2d::{Color, PerlinTextureSettings, Rectangle, RegularPolygon};
 use std::any::Any;
 
 enum Geometry {
@@ -23,15 +23,18 @@ impl Geometry {
 struct DrawNodeInput {
     geometry: Geometry,
     color: OneOrMany<Color>,
+    texture: OneOrMany<PerlinTextureSettings>,
 }
 
 impl DrawNodeInput {
     fn from_any(inputs: &mut Vec<Box<dyn Any>>) -> Result<Self, ()> {
-        if inputs.len() < 2 {
+        if inputs.len() < 3 {
             return Err(());
         }
 
-        let valid = Geometry::is(&*inputs[0]) && OneOrMany::<Color>::is(&*inputs[1]);
+        let valid = Geometry::is(&*inputs[0])
+            && OneOrMany::<Color>::is(&*inputs[1])
+            && OneOrMany::<PerlinTextureSettings>::is(&*inputs[2]);
 
         if !valid {
             return Err(());
@@ -41,38 +44,34 @@ impl DrawNodeInput {
             OneOrMany::<T>::downcast(v).unwrap()
         }
 
-        let mut inputs = inputs.drain(0..2);
+        let mut inputs = inputs.drain(0..3);
         let geometry = Geometry::downcast(inputs.next().unwrap()).unwrap();
         let color = take(inputs.next().unwrap());
-        Ok(Self { geometry, color })
+        let texture = take(inputs.next().unwrap());
+        Ok(Self {
+            geometry,
+            color,
+            texture,
+        })
     }
 
     fn op(self) -> Box<dyn Any> {
-        let mut dl = solstice_2d::DrawList::default();
+        use nodes::one_many::op3 as op;
         match self.geometry {
-            Geometry::Rectangle(geometry) => match (geometry, self.color) {
-                (OneOrMany::One(geometry), OneOrMany::One(color)) => {
-                    dl.draw_with_color(geometry.inner(), color.inner());
-                }
-                (geometry, color) => {
-                    for (geometry, color) in geometry.zip(color) {
-                        dl.draw_with_color(geometry, color);
-                    }
-                }
-            },
-            Geometry::RegularPolygon(geometry) => match (geometry, self.color) {
-                (OneOrMany::One(geometry), OneOrMany::One(color)) => {
-                    dl.draw_with_color(geometry.inner(), color.inner());
-                }
-                (geometry, color) => {
-                    for (geometry, color) in geometry.zip(color) {
-                        dl.draw_with_color(geometry, color);
-                    }
-                }
-            },
+            Geometry::Rectangle(geometry) => op(
+                geometry,
+                self.color,
+                self.texture,
+                crate::command::DrawCommand::with_texture,
+            ),
+            Geometry::RegularPolygon(geometry) => op(
+                geometry,
+                self.color,
+                self.texture,
+                crate::command::DrawCommand::with_texture,
+            ),
         }
-
-        Box::new(nodes::One::new(dl))
+        .into_boxed_inner()
     }
 }
 
@@ -88,22 +87,32 @@ impl NodeInput for DrawNode {
 
             let rectangle = OneOrMany::<Rectangle>::type_ids();
             let color = OneOrMany::<Color>::type_ids();
-            std::array::IntoIter::new(rectangle)
-                .cartesian_product(std::array::IntoIter::new(color))
-                .map(|(rectangle, color)| InputGroup {
-                    info: vec![
-                        InputInfo {
-                            name: "geometry",
-                            ty_name: "Rectangle",
-                            type_id: rectangle,
-                        },
-                        InputInfo {
-                            name: "color",
-                            ty_name: "Color",
-                            type_id: color,
-                        },
-                    ]
-                    .into(),
+            let texture = OneOrMany::<PerlinTextureSettings>::type_ids();
+            std::array::IntoIter::new([rectangle, color, texture])
+                .map(std::array::IntoIter::new)
+                .multi_cartesian_product()
+                .map(|mut types| InputGroup {
+                    info: {
+                        let mut types = types.drain(..);
+                        vec![
+                            InputInfo {
+                                name: "geometry",
+                                ty_name: "Rectangle",
+                                type_id: types.next().unwrap(),
+                            },
+                            InputInfo {
+                                name: "color",
+                                ty_name: "Color",
+                                type_id: types.next().unwrap(),
+                            },
+                            InputInfo {
+                                name: "texture",
+                                ty_name: "texture",
+                                type_id: types.next().unwrap(),
+                            },
+                        ]
+                        .into()
+                    },
                 })
                 .collect::<Vec<_>>()
         });

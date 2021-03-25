@@ -4,7 +4,7 @@ use crate::window::winit::event::{ElementState, MouseButton};
 use demoloops_ui::*;
 use glutin::dpi::PhysicalPosition;
 use nodes::*;
-use solstice_2d::{solstice, Draw, DrawList};
+use solstice_2d::{solstice, Draw};
 
 fn main() {
     let (width, height) = (1920., 1080.);
@@ -14,17 +14,17 @@ fn main() {
         .with_inner_size(glutin::dpi::PhysicalSize::new(width, height));
     let (ctx, window) = window::init_ctx(wb, &event_loop);
     let mut ctx = solstice::Context::new(ctx);
-    let mut ctx2d = solstice_2d::Graphics::new(&mut ctx, width, height).unwrap();
+    let mut ctx_2d = solstice_2d::Graphics::new(&mut ctx, width, height).unwrap();
 
     let resources_folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("resources");
-    let graph_path = resources_folder.join("graph4.json");
+    let graph_path = resources_folder.join("graph.json");
 
     let font = ab_glyph::FontVec::try_from_vec({
         let path = resources_folder.join("Roboto-Regular.ttf");
         std::fs::read(path).unwrap()
     })
     .unwrap();
-    let font = ctx2d.add_font(font);
+    let font = ctx_2d.add_font(font);
 
     let mut graph = {
         std::fs::read(&graph_path)
@@ -33,7 +33,8 @@ fn main() {
             .unwrap_or_else(|err| {
                 eprintln!("{}", err);
 
-                let mut graph = UIGraph::new(font, DrawNode, 500., 500.);
+                let mut graph = UIGraph::new(font, ScreenNode, 500., 610.);
+                let draw = graph.add_node(DrawNode, 500., 500.);
                 let count = graph.add_node(ConstantNode::Unsigned(6), 100., 100.);
                 let range = graph.add_node(RangeNode, 100., 210.);
                 let d = graph.add_node(ConstantNode::Float(100.), 100., 500.);
@@ -55,11 +56,14 @@ fn main() {
                 graph.connect(y, rect, 1);
                 graph.connect(d, rect, 2);
                 graph.connect(d, rect, 3);
-                graph.connect(rect, graph.root(), 0);
+                graph.connect(rect, draw, 0);
+
+                graph.connect(draw, graph.root(), 0);
 
                 graph
             })
     };
+    let mut resources_cache = command::ResourcesCache::default();
 
     let mut ui_state = UIState::None;
     let mut mouse_position = PhysicalPosition::new(0., 0.);
@@ -91,7 +95,7 @@ fn main() {
                     match event {
                         WindowEvent::Resized(size) => {
                             ctx.set_viewport(0, 0, size.width as _, size.height as _);
-                            ctx2d.set_width_height(size.width as _, size.height as _);
+                            ctx_2d.set_width_height(size.width as _, size.height as _);
                         }
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                         WindowEvent::KeyboardInput {
@@ -167,8 +171,13 @@ fn main() {
                     times.push_back(elapsed);
                     match result {
                         Ok(output) => {
-                            let dl = output.downcast::<One<DrawList>>().unwrap();
-                            ctx2d.process(&mut ctx, &dl.inner());
+                            let commands = output.downcast::<One<Vec<command::Command>>>().unwrap();
+                            command::Command::batch_execute(
+                                &mut ctx,
+                                &mut ctx_2d,
+                                &mut resources_cache,
+                                &*commands,
+                            );
                         }
                         Err(_err) => {
                             // eprintln!("{:?}", err);
@@ -177,7 +186,7 @@ fn main() {
                 }
 
                 if show_graph {
-                    let mut g = ctx2d.lock(&mut ctx);
+                    let mut g = ctx_2d.lock(&mut ctx);
                     let average_elapsed =
                         times.iter().sum::<std::time::Duration>() / times.len() as u32;
                     g.print(
@@ -223,6 +232,7 @@ const POSSIBLE_NODES: once_cell::sync::Lazy<Vec<Box<dyn Node>>> =
             Box::new(HSLNode),
             Box::new(RectangleNode),
             Box::new(RegularPolygonNode),
+            Box::new(NoiseTextureNode),
             Box::new(DrawNode),
         ]
     });

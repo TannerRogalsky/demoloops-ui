@@ -1,3 +1,4 @@
+pub mod command;
 mod nodes;
 
 pub use self::nodes::*;

@@ -317,6 +317,9 @@ pub trait NodeInput {
     fn is_terminator(&self) -> bool {
         false
     }
+    fn variadic(&self) -> bool {
+        false
+    }
     fn inputs(&self) -> PossibleInputs;
 }
 
