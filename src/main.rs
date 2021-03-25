@@ -232,6 +232,7 @@ const POSSIBLE_NODES: once_cell::sync::Lazy<Vec<Box<dyn Node>>> =
             Box::new(HSLNode),
             Box::new(RectangleNode),
             Box::new(RegularPolygonNode),
+            Box::new(WhiteTextureNode),
             Box::new(NoiseTextureNode),
             Box::new(DrawNode),
         ]

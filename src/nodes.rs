@@ -5,6 +5,7 @@ mod noise_texture;
 mod rectangle;
 mod regular_polygon;
 mod screen;
+mod white_texture;
 
 pub use color::ColorNode;
 pub use draw::DrawNode;
@@ -13,3 +14,4 @@ pub use noise_texture::NoiseTextureNode;
 pub use rectangle::RectangleNode;
 pub use regular_polygon::RegularPolygonNode;
 pub use screen::ScreenNode;
+pub use white_texture::WhiteTextureNode;
