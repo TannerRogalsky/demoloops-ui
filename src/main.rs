@@ -64,6 +64,7 @@ fn main() {
             })
     };
     let mut resources_cache = command::ResourcesCache::default();
+    let mut canvas = solstice_2d::Canvas::new(&mut ctx, width, height).unwrap();
 
     let mut ui_state = UIState::None;
     let mut mouse_position = PhysicalPosition::new(0., 0.);
@@ -72,20 +73,20 @@ fn main() {
     let mut show_graph = true;
     let mut times = std::collections::VecDeque::with_capacity(60);
 
-    let _execution_thread_handle = std::thread::spawn({
-        let graph = graph.clone();
-        move || {
-            loop {
-                let _r = std::panic::catch_unwind(|| {
-                    // let mut guard = graph.lock().unwrap();
-                    match graph.clone().execute() {
-                        Ok(_) => {}
-                        Err(_) => {}
-                    }
-                });
-            }
-        }
-    });
+    // let _execution_thread_handle = std::thread::spawn({
+    //     let graph = graph.clone();
+    //     move || {
+    //         loop {
+    //             let _r = std::panic::catch_unwind(|| {
+    //                 // let mut guard = graph.lock().unwrap();
+    //                 match graph.clone().execute() {
+    //                     Ok(_) => {}
+    //                     Err(_) => {}
+    //                 }
+    //             });
+    //         }
+    //     }
+    // });
 
     event_loop.run(move |event, _target, control_flow| {
         use glutin::{event::*, event_loop::*};
@@ -96,6 +97,7 @@ fn main() {
                         WindowEvent::Resized(size) => {
                             ctx.set_viewport(0, 0, size.width as _, size.height as _);
                             ctx_2d.set_width_height(size.width as _, size.height as _);
+                            canvas = solstice_2d::Canvas::new(&mut ctx, width, height).unwrap();
                         }
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                         WindowEvent::KeyboardInput {
@@ -187,6 +189,8 @@ fn main() {
 
                 if show_graph {
                     let mut g = ctx_2d.lock(&mut ctx);
+                    g.set_canvas(Some(canvas.clone()));
+                    g.clear(solstice_2d::Color::new(0.1, 0.1, 0.1, 0.2));
                     let average_elapsed =
                         times.iter().sum::<std::time::Duration>() / times.len() as u32;
                     g.print(
@@ -202,6 +206,12 @@ fn main() {
                             mouse_position,
                             graph: &mut graph,
                         },
+                    );
+                    g.set_canvas(None);
+                    g.image_with_color(
+                        solstice_2d::Rectangle::new(0., 0., width, height),
+                        canvas.clone(),
+                        solstice_2d::Color::new(1., 1., 1., 1.),
                     );
                 }
 
@@ -235,6 +245,7 @@ const POSSIBLE_NODES: once_cell::sync::Lazy<Vec<Box<dyn Node>>> =
             Box::new(WhiteTextureNode),
             Box::new(NoiseTextureNode),
             Box::new(DrawNode),
+            Box::new(ClearNode),
         ]
     });
 
@@ -610,23 +621,38 @@ impl UIState {
                                     .map(|node| (id, node, metadata))
                             });
                         if let Some((to, node, metadata)) = clicked {
-                            if let Some(most) = node
-                                .inputs()
-                                .groups
-                                .iter()
-                                .max_by(|a, b| a.info.len().cmp(&b.info.len()))
-                            {
-                                let input =
-                                    most.info.iter().enumerate().find_map(|(index, _info)| {
-                                        if rect_contains(&metadata.input(index), mx, my) {
-                                            Some(index)
-                                        } else {
-                                            None
-                                        }
-                                    });
+                            if node.variadic() {
+                                let connections = graph
+                                    .inner()
+                                    .connections()
+                                    .iter()
+                                    .filter(|c| c.to == to)
+                                    .count();
+                                for index in 0..=connections {
+                                    if rect_contains(&metadata.input(index), mx, my) {
+                                        graph.connect(ctx.from, to, index);
+                                        break;
+                                    }
+                                }
+                            } else {
+                                if let Some(most) = node
+                                    .inputs()
+                                    .groups
+                                    .iter()
+                                    .max_by(|a, b| a.info.len().cmp(&b.info.len()))
+                                {
+                                    let input =
+                                        most.info.iter().enumerate().find_map(|(index, _info)| {
+                                            if rect_contains(&metadata.input(index), mx, my) {
+                                                Some(index)
+                                            } else {
+                                                None
+                                            }
+                                        });
 
-                                if let Some(input) = input {
-                                    graph.connect(ctx.from, to, input);
+                                    if let Some(input) = input {
+                                        graph.connect(ctx.from, to, input);
+                                    }
                                 }
                             }
                         }

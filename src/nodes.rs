@@ -1,3 +1,4 @@
+mod clear;
 mod color;
 mod draw;
 mod hsl;
@@ -7,6 +8,7 @@ mod regular_polygon;
 mod screen;
 mod white_texture;
 
+pub use clear::ClearNode;
 pub use color::ColorNode;
 pub use draw::DrawNode;
 pub use hsl::HSLNode;

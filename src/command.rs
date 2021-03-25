@@ -69,6 +69,12 @@ pub struct ClearCommand {
     color: Color,
 }
 
+impl ClearCommand {
+    pub fn new(color: Color) -> Self {
+        Self { color }
+    }
+}
+
 #[derive(Default, Debug)]
 pub struct ResourcesCache {
     textures: std::collections::HashMap<PerlinTextureSettings, Image>,

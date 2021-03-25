@@ -220,7 +220,7 @@ impl UIGraph {
                 g.stroke_with_color(metadata.resize(), black);
 
                 if let Some(input_group) = node.inputs().groups.iter().next() {
-                    for (index, input) in input_group.info.iter().enumerate() {
+                    let mut draw_input = |info: &::nodes::InputInfo, index: usize| {
                         let rect: Rectangle = metadata.input(index);
                         g.draw_with_color(rect, Color::new(0., 0., 1., 1.));
                         g.stroke_with_color(rect, black);
@@ -228,7 +228,25 @@ impl UIGraph {
                             x: rect.x + 5.,
                             ..rect
                         };
-                        g.print(input.name, self.font, 16., text_bounds);
+                        g.print(info.name, self.font, 16., text_bounds);
+                    };
+
+                    if node.variadic() {
+                        if let Some(info) = input_group.info.first() {
+                            let connections = self
+                                .inner
+                                .connections()
+                                .iter()
+                                .filter(|c| c.to == id)
+                                .count();
+                            for index in 0..=connections {
+                                draw_input(info, index);
+                            }
+                        }
+                    } else {
+                        for (index, info) in input_group.info.iter().enumerate() {
+                            draw_input(info, index);
+                        }
                     }
                 }
 
