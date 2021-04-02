@@ -64,7 +64,7 @@ impl NodeInput for HSLNode {
         use once_cell::sync::Lazy;
         static GROUPS: Lazy<Vec<InputGroup<'static>>> =
             Lazy::new(|| HSLInput::types(&["hue", "saturation", "light"]));
-        PossibleInputs { groups: &*GROUPS }
+        PossibleInputs::new(&*GROUPS)
     }
 }
 

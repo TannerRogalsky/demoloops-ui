@@ -31,7 +31,7 @@ impl AddNodeInput {
             acc
         });
 
-        PossibleInputs { groups: &*GROUPS }
+        PossibleInputs::new(&*GROUPS)
     }
 }
 
@@ -51,7 +51,7 @@ impl FromAny for AddNodeInput {
 pub struct AddNode;
 
 impl NodeInput for AddNode {
-    fn inputs(&self) -> PossibleInputs {
+    fn inputs(&self) -> PossibleInputs<'static> {
         AddNodeInput::types()
     }
 }

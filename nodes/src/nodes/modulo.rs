@@ -25,7 +25,7 @@ impl ModuloGroup {
 pub struct ModuloNode;
 
 impl NodeInput for ModuloNode {
-    fn inputs(&self) -> PossibleInputs {
+    fn inputs(&self) -> PossibleInputs<'static> {
         use once_cell::sync::Lazy;
         static GROUPS: Lazy<Vec<crate::InputGroup>> = Lazy::new(|| {
             use crate::InputSupplemental;
@@ -36,7 +36,7 @@ impl NodeInput for ModuloNode {
             acc.extend(unsigned);
             acc
         });
-        PossibleInputs { groups: &*GROUPS }
+        PossibleInputs::new(&*GROUPS)
     }
 }
 

@@ -72,7 +72,7 @@ impl nodes::InputSupplemental for ScreenInput {
         std::array::IntoIter::new(command_types())
             .map(|type_id| InputGroup {
                 info: vec![nodes::InputInfo {
-                    name: names[0],
+                    name: names[0].into(),
                     ty_name: "Command",
                     type_id,
                 }]
@@ -90,12 +90,12 @@ impl NodeInput for ScreenNode {
         true
     }
 
-    fn inputs(&self) -> PossibleInputs {
+    fn inputs(&self) -> PossibleInputs<'static> {
         use nodes::InputSupplemental;
         use once_cell::sync::Lazy;
         static GROUPS: Lazy<Vec<nodes::InputGroup<'static>>> =
             Lazy::new(|| ScreenInput::types(&["command"]));
-        PossibleInputs { groups: &*GROUPS }
+        PossibleInputs::new(&*GROUPS)
     }
 }
 

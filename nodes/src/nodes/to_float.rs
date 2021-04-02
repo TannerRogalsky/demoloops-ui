@@ -50,7 +50,7 @@ impl Input {
                     use crate::InputInfo;
                     InputGroup {
                         info: vec![InputInfo {
-                            name: "number",
+                            name: "number".into(),
                             ty_name: "f32",
                             type_id,
                         }]
@@ -61,7 +61,7 @@ impl Input {
                     use crate::InputInfo;
                     InputGroup {
                         info: vec![InputInfo {
-                            name: "number",
+                            name: "number".into(),
                             ty_name: "u32",
                             type_id,
                         }]
@@ -71,7 +71,7 @@ impl Input {
                 .collect()
         });
 
-        PossibleInputs { groups: &*GROUPS }
+        PossibleInputs::new(&*GROUPS)
     }
 }
 
@@ -79,7 +79,7 @@ impl Input {
 pub struct ToFloatNode;
 
 impl NodeInput for ToFloatNode {
-    fn inputs(&self) -> PossibleInputs {
+    fn inputs(&self) -> PossibleInputs<'static> {
         Input::inputs()
     }
 }

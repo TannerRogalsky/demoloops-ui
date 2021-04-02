@@ -35,7 +35,7 @@ impl RatioGroup {
 pub struct RatioNode;
 
 impl NodeInput for RatioNode {
-    fn inputs(&self) -> PossibleInputs {
+    fn inputs(&self) -> PossibleInputs<'static> {
         use once_cell::sync::Lazy;
         static GROUPS: Lazy<Vec<crate::InputGroup>> = Lazy::new(|| {
             use crate::InputSupplemental;
@@ -46,7 +46,7 @@ impl NodeInput for RatioNode {
             acc.extend(unsigned);
             acc
         });
-        PossibleInputs { groups: &*GROUPS }
+        PossibleInputs::new(&*GROUPS)
     }
 }
 

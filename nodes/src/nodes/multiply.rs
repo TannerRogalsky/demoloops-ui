@@ -31,7 +31,7 @@ impl MultiplyNodeInput {
             acc
         });
 
-        PossibleInputs { groups: &*GROUPS }
+        PossibleInputs::new(&*GROUPS)
     }
 }
 
@@ -51,7 +51,7 @@ impl FromAny for MultiplyNodeInput {
 pub struct MultiplyNode;
 
 impl NodeInput for MultiplyNode {
-    fn inputs(&self) -> PossibleInputs {
+    fn inputs(&self) -> PossibleInputs<'static> {
         MultiplyNodeInput::types()
     }
 }

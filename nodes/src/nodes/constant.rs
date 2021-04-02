@@ -1,18 +1,20 @@
 use crate::{One, PossibleInputs};
 use std::any::Any;
 
-#[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ConstantNode {
     Unsigned(u32),
     Float(f32),
+    Text(String),
 }
 
 impl crate::NodeInput for ConstantNode {
     fn is_terminator(&self) -> bool {
         true
     }
-    fn inputs(&self) -> PossibleInputs {
-        PossibleInputs { groups: &[] }
+    fn inputs(&self) -> PossibleInputs<'static> {
+        let groups: &'static [crate::InputGroup] = &[];
+        PossibleInputs::new(groups)
     }
 }
 
@@ -21,6 +23,7 @@ impl crate::NodeOutput for ConstantNode {
         Ok(match self {
             ConstantNode::Unsigned(output) => Box::new(One(*output)),
             ConstantNode::Float(output) => Box::new(One(*output)),
+            ConstantNode::Text(output) => Box::new(One(output.clone())),
         })
     }
 }

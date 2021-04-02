@@ -6,6 +6,24 @@ use glutin::dpi::PhysicalPosition;
 use nodes::*;
 use solstice_2d::{solstice, Draw};
 
+const SHADER_SRC: &str = r#"
+#ifdef VERTEX
+vec4 pos(mat4 transform_projection, vec4 vertex_position) {
+    return transform_projection * vertex_position;
+}
+#endif
+
+#ifdef FRAGMENT
+uniform float offset;
+
+vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords) {
+    vec2 p = texture_coords - offset;
+    float r = sqrt(dot(p, p));
+    return mix(color, vec4(0.), r);
+}
+#endif
+"#;
+
 fn main() {
     let (width, height) = (1920., 1080.);
     let event_loop = glutin::event_loop::EventLoop::new();
@@ -17,7 +35,7 @@ fn main() {
     let mut ctx_2d = solstice_2d::Graphics::new(&mut ctx, width, height).unwrap();
 
     let resources_folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("resources");
-    let graph_path = resources_folder.join("graph.json");
+    let graph_path = resources_folder.join("graph2.json");
 
     let font = ab_glyph::FontVec::try_from_vec({
         let path = resources_folder.join("Roboto-Regular.ttf");
@@ -44,10 +62,12 @@ fn main() {
                 let multiply = graph.add_node(MultiplyNode, 500., 210.);
                 let rect = graph.add_node(RectangleNode, 300., 500.);
 
+                let _text = graph.add_node(ConstantNode::Text(SHADER_SRC.to_owned()), 100., 600.);
+
                 graph.connect(count, range, 0);
 
-                graph.connect(count, ratio, 0);
-                graph.connect(range, ratio, 1);
+                graph.connect(range, ratio, 0);
+                graph.connect(count, ratio, 1);
 
                 graph.connect(offset, multiply, 0);
                 graph.connect(ratio, multiply, 1);
@@ -244,6 +264,7 @@ const POSSIBLE_NODES: once_cell::sync::Lazy<Vec<Box<dyn Node>>> =
             Box::new(RegularPolygonNode),
             Box::new(WhiteTextureNode),
             Box::new(NoiseTextureNode),
+            Box::new(ShaderNode::default()),
             Box::new(DrawNode),
             Box::new(ClearNode),
         ]
@@ -458,6 +479,7 @@ impl UIState {
                                         let buffer = match node {
                                             ConstantNode::Unsigned(v) => v.to_string(),
                                             ConstantNode::Float(v) => v.to_string(),
+                                            ConstantNode::Text(v) => v.clone(),
                                         };
                                         Self::NodeAction(ActionContext {
                                             node_id,
@@ -526,7 +548,7 @@ impl UIState {
                                     } else if let Ok(v) = buffer.parse::<f32>() {
                                         *node = ConstantNode::Float(v);
                                     } else {
-                                        *node = ConstantNode::Unsigned(0);
+                                        *node = ConstantNode::Text(buffer.clone());
                                     }
                                 }
                             }

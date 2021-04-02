@@ -22,7 +22,7 @@ impl NodeInput for RegularPolygonNode {
         use once_cell::sync::Lazy;
         static GROUPS: Lazy<Vec<InputGroup<'static>>> =
             Lazy::new(|| RegularPolygonInput::types(&["x", "y", "vertex_count", "radius"]));
-        PossibleInputs { groups: &*GROUPS }
+        PossibleInputs::new(&*GROUPS)
     }
 }
 

@@ -77,6 +77,14 @@ pub trait InputSupplemental {
     fn types(names: &'static [&str]) -> Vec<InputGroup<'static>>;
 }
 
+pub trait InputComponent {
+    fn is(v: &dyn std::any::Any) -> bool;
+    fn type_ids() -> Vec<std::any::TypeId>;
+    fn downcast(v: Box<dyn std::any::Any>) -> Result<Self, Box<dyn std::any::Any>>
+    where
+        Self: Sized;
+}
+
 #[derive(Debug, Clone)]
 pub enum OneOrMany<T> {
     One(One<T>),
@@ -259,21 +267,27 @@ pub mod one_many {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct InputInfo {
-    pub name: &'static str,
+#[derive(Debug, Clone)]
+pub struct InputInfo<'a> {
+    pub name: std::borrow::Cow<'a, str>,
     pub ty_name: &'static str,
     pub type_id: std::any::TypeId,
 }
 
 // Success is matching any of these
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct PossibleInputs<'a> {
-    pub groups: &'a [InputGroup<'a>],
+    pub groups: std::borrow::Cow<'a, [InputGroup<'a>]>,
 }
 
-impl PossibleInputs<'_> {
-    pub fn best_match(&self, inputs: &[Box<dyn Any>]) -> Option<&InputGroup> {
+impl<'a> PossibleInputs<'a> {
+    pub fn new<I: Into<std::borrow::Cow<'a, [InputGroup<'a>]>>>(groups: I) -> Self {
+        Self {
+            groups: groups.into(),
+        }
+    }
+
+    pub fn best_match<'b>(&'b self, inputs: &[Box<dyn Any>]) -> Option<&'b InputGroup<'a>> {
         self.groups
             .iter()
             .max_by(|a, b| a.score(inputs).cmp(&b.score(inputs)))
@@ -283,7 +297,7 @@ impl PossibleInputs<'_> {
 // Success is matching all of these
 #[derive(Debug, Clone)]
 pub struct InputGroup<'a> {
-    pub info: std::borrow::Cow<'a, [InputInfo]>,
+    pub info: std::borrow::Cow<'a, [InputInfo<'a>]>,
 }
 
 impl InputGroup<'_> {
@@ -320,7 +334,7 @@ pub trait NodeInput {
     fn variadic(&self) -> bool {
         false
     }
-    fn inputs(&self) -> PossibleInputs;
+    fn inputs(&self) -> PossibleInputs<'static>;
 }
 
 pub trait NodeOutput {
@@ -329,13 +343,7 @@ pub trait NodeOutput {
 
 #[typetag::serde(tag = "type")]
 pub trait Node:
-    std::fmt::Debug
-    + dyn_clone::DynClone
-    + NodeInput
-    + NodeOutput
-    + Any
-    + Send
-    + std::panic::RefUnwindSafe
+    std::fmt::Debug + dyn_clone::DynClone + NodeInput + NodeOutput + Any + Send
 {
     fn name(&self) -> &'static str;
 }

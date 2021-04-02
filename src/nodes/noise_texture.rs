@@ -28,7 +28,7 @@ impl NodeInput for NoiseTextureNode {
         use once_cell::sync::Lazy;
         static GROUPS: Lazy<Vec<nodes::InputGroup<'static>>> =
             Lazy::new(|| NoiseTextureInput::types(&["seed", "width", "height"]));
-        PossibleInputs { groups: &*GROUPS }
+        PossibleInputs::new(&*GROUPS)
     }
 }
 

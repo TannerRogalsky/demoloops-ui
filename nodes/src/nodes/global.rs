@@ -21,8 +21,9 @@ impl crate::NodeInput for GlobalNode {
     fn is_terminator(&self) -> bool {
         true
     }
-    fn inputs(&self) -> PossibleInputs {
-        PossibleInputs { groups: &[] }
+    fn inputs(&self) -> PossibleInputs<'static> {
+        let groups: &'static [crate::InputGroup] = &[];
+        PossibleInputs::new(groups)
     }
 }
 

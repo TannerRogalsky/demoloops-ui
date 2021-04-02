@@ -23,7 +23,7 @@ impl NodeInput for RectangleNode {
         use once_cell::sync::Lazy;
         static GROUPS: Lazy<Vec<InputGroup<'static>>> =
             Lazy::new(|| RectangleInput::types(&["x", "y", "width", "height"]));
-        PossibleInputs { groups: &*GROUPS }
+        PossibleInputs::new(&*GROUPS)
     }
 }
 

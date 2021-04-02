@@ -228,7 +228,8 @@ impl UIGraph {
                             x: rect.x + 5.,
                             ..rect
                         };
-                        g.print(info.name, self.font, 16., text_bounds);
+                        let text = info.name.clone().into_owned();
+                        g.print(text, self.font, 16., text_bounds);
                     };
 
                     if node.variadic() {
@@ -260,6 +261,7 @@ impl UIGraph {
                             ConstantNode::Float(v) => {
                                 format!("{:.2}", v)
                             }
+                            ConstantNode::Text(v) => v.clone(),
                         };
                         let bounds = Rectangle {
                             x: metadata.position.x + 5.,
