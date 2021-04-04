@@ -13,3 +13,5 @@ typetag = "0.1"
 dyn-clone = "1.0"
 once_cell = "1.7"
 itertools = "0.10"
+
+nodes-derive = { path = "../nodes-derive" }

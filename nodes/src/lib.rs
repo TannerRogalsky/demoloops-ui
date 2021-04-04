@@ -1,9 +1,13 @@
+mod input_stack;
 mod nodes;
 
 pub use self::nodes::*;
+pub use input_stack::*;
+pub use itertools::Itertools;
+pub use nodes_derive::{FromAnyProto, InputComponent};
 use serde::{Deserialize, Serialize};
 use slotmap::SlotMap;
-use std::any::Any;
+use std::any::{Any, TypeId};
 
 #[derive(Debug, Copy, Clone, Default, Ord, PartialOrd, Eq, PartialEq)]
 pub struct One<T>(T);
@@ -71,6 +75,161 @@ pub trait FromAny {
     fn from_any(inputs: &mut Vec<Box<dyn std::any::Any>>) -> Result<Self, ()>
     where
         Self: Sized;
+}
+
+pub trait FromAnyProto {
+    fn from_any(inputs: InputStack<'_, Box<dyn Any>>) -> Result<Self, ()>
+    where
+        Self: Sized;
+    fn possible_inputs(names: &'static [&str]) -> PossibleInputs<'static>;
+}
+
+impl<T> InputComponent for One<T>
+where
+    T: 'static,
+{
+    fn is(v: &dyn Any) -> bool {
+        v.is::<One<T>>()
+    }
+
+    fn type_ids() -> Vec<TypeId> {
+        vec![TypeId::of::<One<T>>()]
+    }
+
+    fn downcast(v: Box<dyn Any>) -> Result<Self, Box<dyn Any>> {
+        v.downcast::<One<T>>().map(|v| *v)
+    }
+}
+
+impl<T> InputComponent for Many<T>
+where
+    T: 'static,
+{
+    fn is(v: &dyn Any) -> bool {
+        v.is::<Many<T>>()
+    }
+
+    fn type_ids() -> Vec<TypeId> {
+        vec![TypeId::of::<Many<T>>()]
+    }
+
+    fn downcast(v: Box<dyn Any>) -> Result<Self, Box<dyn Any>> {
+        v.downcast::<Many<T>>().map(|v| *v)
+    }
+}
+
+impl<T> InputComponent for OneOrMany<T>
+where
+    T: 'static,
+{
+    fn is(v: &dyn Any) -> bool {
+        v.is::<Many<T>>() || v.is::<One<T>>() || v.is::<OneOrMany<T>>()
+    }
+
+    fn type_ids() -> Vec<TypeId> {
+        vec![
+            TypeId::of::<Many<T>>(),
+            TypeId::of::<One<T>>(),
+            TypeId::of::<OneOrMany<T>>(),
+        ]
+    }
+
+    fn downcast(v: Box<dyn Any>) -> Result<Self, Box<dyn Any>> {
+        let v = match v.downcast::<Many<T>>() {
+            Ok(v) => return Ok(OneOrMany::Many(*v)),
+            Err(v) => v,
+        };
+        let v = match v.downcast::<One<T>>() {
+            Ok(v) => return Ok(OneOrMany::One(*v)),
+            Err(v) => v,
+        };
+        v.downcast::<OneOrMany<T>>().map(|v| *v)
+    }
+}
+
+impl<T: 'static> FromAnyProto for One<T> {
+    fn from_any(inputs: InputStack<'_, Box<dyn Any>>) -> Result<Self, ()> {
+        if inputs.as_slice().len() == 1 {
+            if One::<T>::is(inputs.deref_iter().next().unwrap()) {
+                Ok(One::<T>::downcast(inputs.consume().next().unwrap()).unwrap())
+            } else {
+                Err(())
+            }
+        } else {
+            Err(())
+        }
+    }
+
+    fn possible_inputs(names: &'static [&str]) -> PossibleInputs<'static> {
+        PossibleInputs::new(vec![InputGroup {
+            info: vec![InputInfo {
+                name: names[0].into(),
+                ty_name: std::any::type_name::<T>(),
+                type_id: TypeId::of::<One<T>>(),
+            }]
+            .into(),
+        }])
+    }
+}
+
+impl<T: 'static> FromAnyProto for Many<T> {
+    fn from_any(inputs: InputStack<'_, Box<dyn Any>>) -> Result<Self, ()> {
+        if inputs.as_slice().len() == 1 {
+            if Many::<T>::is(inputs.deref_iter().next().unwrap()) {
+                Ok(Many::<T>::downcast(inputs.consume().next().unwrap()).unwrap())
+            } else {
+                Err(())
+            }
+        } else {
+            Err(())
+        }
+    }
+
+    fn possible_inputs(names: &'static [&str]) -> PossibleInputs<'static> {
+        PossibleInputs::new(vec![InputGroup {
+            info: vec![InputInfo {
+                name: names[0].into(),
+                ty_name: std::any::type_name::<T>(),
+                type_id: TypeId::of::<Many<T>>(),
+            }]
+            .into(),
+        }])
+    }
+}
+
+impl<T> FromAnyProto for OneOrMany<T>
+where
+    T: 'static,
+{
+    fn from_any(mut inputs: InputStack<'_, Box<dyn Any>>) -> Result<Self, ()> {
+        if let Ok(v) = Many::<T>::from_any(inputs.sub(..1)) {
+            Ok(OneOrMany::Many(v))
+        } else if let Ok(v) = One::<T>::from_any(inputs.sub(..1)) {
+            Ok(OneOrMany::One(v))
+        } else {
+            Err(())
+        }
+    }
+
+    fn possible_inputs(names: &'static [&str]) -> PossibleInputs<'static> {
+        let one = One::<T>::possible_inputs(names);
+        let many = Many::<T>::possible_inputs(names);
+        let either = PossibleInputs::new(vec![InputGroup {
+            info: vec![InputInfo {
+                name: names[0].into(),
+                ty_name: std::any::type_name::<T>(),
+                type_id: TypeId::of::<OneOrMany<T>>(),
+            }]
+            .into(),
+        }]);
+
+        let groups = std::array::IntoIter::new([one, many, either])
+            .map(|p| p.groups.into_owned().into_iter())
+            .multi_cartesian_product()
+            .flatten()
+            .collect::<Vec<InputGroup>>();
+        PossibleInputs::new(groups)
+    }
 }
 
 pub trait InputSupplemental {
@@ -150,7 +309,6 @@ impl<T: 'static> OneOrMany<T> {
     }
 
     pub fn type_ids() -> [std::any::TypeId; 3] {
-        use std::any::TypeId;
         [
             TypeId::of::<Self>(),
             TypeId::of::<One<T>>(),
