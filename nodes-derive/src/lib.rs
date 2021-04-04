@@ -29,8 +29,10 @@ pub fn derive_from_any(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
             let count = data.fields.len();
 
             quote::quote! {
-                impl #impl_generics  crate::FromAnyProto for #ident #ty_generics #where_clause {
-                    fn from_any(inputs: InputStack<'_, Box<dyn std::any::Any>>) -> Result<Self, ()> {
+                impl #impl_generics ::nodes::FromAnyProto for #ident #ty_generics #where_clause {
+                    fn from_any(inputs: ::nodes::InputStack<'_, Box<dyn std::any::Any>>) -> Result<Self, ()> {
+                        use ::nodes::InputComponent;
+
                         if inputs.as_slice().len() < #count {
                             eprintln!("{} < {}", inputs.as_slice().len(), #count);
                             return Err(());
@@ -47,14 +49,14 @@ pub fn derive_from_any(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
                             #fields: <#types>::downcast(inputs.next().unwrap()).unwrap(),
                         )*})
                     }
-                    fn possible_inputs(names: &'static [&str]) -> crate::PossibleInputs<'static> {
-                        use crate::Itertools;
-                        let groups = std::array::IntoIter::new([#(<#types as crate::InputComponent>::type_ids()),*])
+                    fn possible_inputs(names: &'static [&str]) -> ::nodes::PossibleInputs<'static> {
+                        use ::nodes::Itertools;
+                        let groups = std::array::IntoIter::new([#(<#types as ::nodes::InputComponent>::type_ids()),*])
                             .multi_cartesian_product()
                             .map(|types| InputGroup {
                                 info: std::array::IntoIter::new([#(std::any::type_name::<#types>()),*])
                                 .zip(names.iter().copied().zip(types))
-                                .map(|(ty_name, (name, type_id))| crate::InputInfo {
+                                .map(|(ty_name, (name, type_id))| ::nodes::InputInfo {
                                     name: name.into(),
                                     ty_name,
                                     type_id,
@@ -83,20 +85,20 @@ pub fn derive_from_any(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
 
             let downcasts = all.iter().map(|(variant, field)| {
                 quote::quote! {
-                    if let Ok(v) = <#field as crate::FromAnyProto>::from_any(inputs.sub(..)) {
+                    if let Ok(v) = <#field as ::nodes::FromAnyProto>::from_any(inputs.sub(..)) {
                         return Ok(Self::#variant(v));
                     }
                 }
             });
 
             quote::quote! {
-                impl #impl_generics crate::FromAnyProto for #ident #ty_generics #where_clause {
-                    fn from_any(mut inputs: InputStack<'_, Box<dyn std::any::Any>>) -> Result<Self, ()> {
+                impl #impl_generics ::nodes::FromAnyProto for #ident #ty_generics #where_clause {
+                    fn from_any(mut inputs: ::nodes::InputStack<'_, Box<dyn std::any::Any>>) -> Result<Self, ()> {
                         #(#downcasts);*
                         Err(())
                     }
-                    fn possible_inputs(names: &'static [&str]) -> crate::PossibleInputs<'static> {
-                        use crate::Itertools;
+                    fn possible_inputs(names: &'static [&str]) -> ::nodes::PossibleInputs<'static> {
+                        use ::nodes::Itertools;
                         let groups = std::array::IntoIter::new([#(<#fields>::possible_inputs(names)), *])
                             .flat_map(|p| p.groups.into_owned().into_iter())
                             .collect::<Vec<InputGroup>>();
@@ -124,7 +126,7 @@ pub fn derive_from_input_component(input: proc_macro::TokenStream) -> proc_macro
         }
         Data::Struct(data) => {
             quote::quote! {
-                impl #impl_generics crate::InputComponent for #ident #ty_generics #where_clause {
+                impl #impl_generics ::nodes::InputComponent for #ident #ty_generics #where_clause {
                     fn is(v: &dyn std::any::Any) -> bool {
                         v.is::<#ident>()
                     }
@@ -161,7 +163,7 @@ pub fn derive_from_input_component(input: proc_macro::TokenStream) -> proc_macro
             });
 
             quote::quote! {
-                impl #impl_generics crate::InputComponent for #ident #ty_generics #where_clause {
+                impl #impl_generics ::nodes::InputComponent for #ident #ty_generics #where_clause {
                     fn is(v: &dyn std::any::Any) -> bool {
                         #(<#fields>::is(v)) ||* || v.is::<#ident>()
                     }
