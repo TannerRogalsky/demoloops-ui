@@ -70,7 +70,7 @@ pub mod generic {
                             info: std::array::IntoIter::new([$(std::any::type_name::<$name>(),)+])
                             .zip(names.iter().copied().zip(types))
                             .map(|(ty_name, (name, type_id))| crate::InputInfo {
-                                name,
+                                name: name.into(),
                                 ty_name,
                                 type_id,
                             })

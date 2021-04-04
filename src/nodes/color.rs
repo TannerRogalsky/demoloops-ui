@@ -22,7 +22,7 @@ impl NodeInput for ColorNode {
         use once_cell::sync::Lazy;
         static GROUPS: Lazy<Vec<InputGroup<'static>>> =
             Lazy::new(|| ColorInput::types(&["red", "green", "blue", "alpha"]));
-        PossibleInputs { groups: &*GROUPS }
+        PossibleInputs::new(&*GROUPS)
     }
 }
 

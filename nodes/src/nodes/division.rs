@@ -34,7 +34,7 @@ impl DivisionNodeInput {
             acc.extend(unsigned);
             acc
         });
-        PossibleInputs { groups: &*GROUPS }
+        PossibleInputs::new(&*GROUPS)
     }
 }
 
@@ -54,7 +54,7 @@ impl FromAny for DivisionNodeInput {
 pub struct DivisionNode;
 
 impl NodeInput for DivisionNode {
-    fn inputs(&self) -> PossibleInputs {
+    fn inputs(&self) -> PossibleInputs<'static> {
         DivisionNodeInput::types()
     }
 }

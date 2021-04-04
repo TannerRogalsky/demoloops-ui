@@ -8,8 +8,9 @@ impl nodes::NodeInput for WhiteTextureNode {
     fn is_terminator(&self) -> bool {
         true
     }
-    fn inputs(&self) -> PossibleInputs {
-        PossibleInputs { groups: &[] }
+    fn inputs(&self) -> PossibleInputs<'static> {
+        let groups: &'static [nodes::InputGroup] = &[];
+        PossibleInputs::new(groups)
     }
 }
 

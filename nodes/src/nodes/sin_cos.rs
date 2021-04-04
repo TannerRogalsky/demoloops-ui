@@ -35,7 +35,7 @@ impl Input {
                     use crate::InputInfo;
                     InputGroup {
                         info: vec![InputInfo {
-                            name: "number",
+                            name: "number".into(),
                             ty_name: "number",
                             type_id,
                         }]
@@ -45,7 +45,7 @@ impl Input {
                 .collect()
         });
 
-        PossibleInputs { groups: &*GROUPS }
+        PossibleInputs::new(&*GROUPS)
     }
 
     fn sin(self) -> Box<dyn Any> {
@@ -69,7 +69,7 @@ impl Input {
 pub struct SineNode;
 
 impl NodeInput for SineNode {
-    fn inputs(&self) -> PossibleInputs {
+    fn inputs(&self) -> PossibleInputs<'static> {
         Input::inputs()
     }
 }
@@ -91,7 +91,7 @@ impl Node for SineNode {
 pub struct CosNode;
 
 impl NodeInput for CosNode {
-    fn inputs(&self) -> PossibleInputs {
+    fn inputs(&self) -> PossibleInputs<'static> {
         Input::inputs()
     }
 }

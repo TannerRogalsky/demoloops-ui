@@ -24,7 +24,7 @@ impl RangeNodeInput {
             std::array::IntoIter::new(OneOrMany::<u32>::type_ids())
                 .map(|type_id| InputGroup {
                     info: vec![InputInfo {
-                        name: "length",
+                        name: "length".into(),
                         ty_name: "u32",
                         type_id,
                     }]
@@ -32,7 +32,7 @@ impl RangeNodeInput {
                 })
                 .collect()
         });
-        PossibleInputs { groups: &*GROUPS }
+        PossibleInputs::new(&*GROUPS)
     }
 }
 
@@ -55,7 +55,7 @@ impl FromAny for RangeNodeInput {
 pub struct RangeNode;
 
 impl NodeInput for RangeNode {
-    fn inputs(&self) -> PossibleInputs {
+    fn inputs(&self) -> PossibleInputs<'static> {
         RangeNodeInput::types()
     }
 }

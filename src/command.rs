@@ -1,3 +1,6 @@
+mod shader;
+
+pub use shader::Shader;
 use solstice_2d::solstice::Context;
 use solstice_2d::{
     solstice::image::Image, Color, Draw, Graphics, GraphicsLock, PerlinTextureSettings, Rectangle,

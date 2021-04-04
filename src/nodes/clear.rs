@@ -17,7 +17,7 @@ impl NodeInput for ClearNode {
         use nodes::InputSupplemental;
         use once_cell::sync::Lazy;
         static GROUPS: Lazy<Vec<InputGroup<'static>>> = Lazy::new(|| ClearInput::types(&["color"]));
-        PossibleInputs { groups: &*GROUPS }
+        PossibleInputs::new(&*GROUPS)
     }
 }
 

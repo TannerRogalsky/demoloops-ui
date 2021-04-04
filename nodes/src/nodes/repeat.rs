@@ -30,12 +30,12 @@ impl RepeatNodeInput {
                 .map(|type_id| InputGroup {
                     info: vec![
                         InputInfo {
-                            name: "count",
+                            name: "count".into(),
                             ty_name: "count",
                             type_id: std::any::TypeId::of::<One<u32>>(),
                         },
                         InputInfo {
-                            name: "value",
+                            name: "value".into(),
                             ty_name: "u32",
                             type_id,
                         },
@@ -44,7 +44,7 @@ impl RepeatNodeInput {
                 })
                 .collect()
         });
-        PossibleInputs { groups: &*GROUPS }
+        PossibleInputs::new(&*GROUPS)
     }
 }
 
@@ -70,7 +70,7 @@ impl FromAny for RepeatNodeInput {
 pub struct RepeatNode;
 
 impl NodeInput for RepeatNode {
-    fn inputs(&self) -> PossibleInputs {
+    fn inputs(&self) -> PossibleInputs<'static> {
         RepeatNodeInput::types()
     }
 }

@@ -117,7 +117,7 @@ impl DrawNodeInput {
 pub struct DrawNode;
 
 impl NodeInput for DrawNode {
-    fn inputs(&self) -> PossibleInputs {
+    fn inputs(&self) -> PossibleInputs<'static> {
         use once_cell::sync::Lazy;
         static GROUPS: Lazy<Vec<InputGroup>> = Lazy::new(|| {
             use ::nodes::InputInfo;
@@ -134,17 +134,17 @@ impl NodeInput for DrawNode {
                         let mut types = types.drain(..);
                         vec![
                             InputInfo {
-                                name: "geometry",
+                                name: "geometry".into(),
                                 ty_name: "Geometry",
                                 type_id: types.next().unwrap(),
                             },
                             InputInfo {
-                                name: "color",
+                                name: "color".into(),
                                 ty_name: "Color",
                                 type_id: types.next().unwrap(),
                             },
                             InputInfo {
-                                name: "texture",
+                                name: "texture".into(),
                                 ty_name: "Texture",
                                 type_id: types.next().unwrap(),
                             },
@@ -154,7 +154,7 @@ impl NodeInput for DrawNode {
                 })
                 .collect::<Vec<_>>()
         });
-        PossibleInputs { groups: &*GROUPS }
+        PossibleInputs::new(&*GROUPS)
     }
 }
 
