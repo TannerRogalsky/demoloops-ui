@@ -1,4 +1,4 @@
-use nodes::{FromAny, InputGroup, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
+use nodes::{FromAnyProto, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
 use solstice_2d::Rectangle;
 use std::any::Any;
 
@@ -19,17 +19,16 @@ pub struct RectangleNode;
 
 impl NodeInput for RectangleNode {
     fn inputs(&self) -> PossibleInputs<'static> {
-        use nodes::InputSupplemental;
         use once_cell::sync::Lazy;
-        static GROUPS: Lazy<Vec<InputGroup<'static>>> =
-            Lazy::new(|| RectangleInput::types(&["x", "y", "width", "height"]));
-        PossibleInputs::new(&*GROUPS)
+        static CACHE: Lazy<PossibleInputs> =
+            Lazy::new(|| RectangleInput::possible_inputs(&["x", "y", "width", "height"]));
+        PossibleInputs::new(&*CACHE.groups)
     }
 }
 
 impl NodeOutput for RectangleNode {
     fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
-        FromAny::from_any(inputs).map(op)
+        FromAnyProto::from_any(nodes::InputStack::new(inputs, ..)).map(op)
     }
 }
 

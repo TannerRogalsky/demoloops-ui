@@ -1,47 +1,29 @@
 use crate::command::*;
-use nodes::{FromAny, InputGroup, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
-use std::any::{Any, TypeId};
+use nodes::{FromAnyProto, InputComponent, InputGroup, InputStack, OneOrMany, PossibleInputs};
+use std::any::Any;
 
 struct ScreenInput {
     commands: Vec<Command>,
 }
 
+#[derive(InputComponent)]
 enum CommandInput {
     Command(nodes::OneOrMany<Command>),
     Draw(nodes::OneOrMany<DrawCommand>),
     Clear(nodes::OneOrMany<ClearCommand>),
 }
 
-fn command_types() -> [TypeId; 9] {
-    let a = OneOrMany::<Command>::type_ids();
-    let b = OneOrMany::<DrawCommand>::type_ids();
-    let c = OneOrMany::<ClearCommand>::type_ids();
-    [a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]]
-}
-
-fn is_command(v: &dyn Any) -> bool {
-    let ty = v.type_id();
-    std::array::IntoIter::new(command_types()).any(|other| ty == other)
-}
-
-fn downcast(v: Box<dyn Any>) -> Result<CommandInput, Box<dyn Any>> {
-    match OneOrMany::<Command>::downcast(v) {
-        Ok(v) => Ok(CommandInput::Command(v)),
-        Err(v) => match OneOrMany::<DrawCommand>::downcast(v) {
-            Ok(v) => Ok(CommandInput::Draw(v)),
-            Err(v) => OneOrMany::<ClearCommand>::downcast(v).map(CommandInput::Clear),
-        },
-    }
-}
-
 fn op(input: ScreenInput) -> Box<dyn Any> {
     Box::new(nodes::One::new(input.commands))
 }
 
-impl FromAny for ScreenInput {
-    fn from_any(inputs: &mut Vec<Box<dyn Any>>) -> Result<Self, ()> {
-        if inputs.iter().all(|i| is_command(&**i)) {
-            let commands = inputs.drain(..).map(downcast).map(Result::unwrap);
+impl FromAnyProto for ScreenInput {
+    fn from_any(inputs: InputStack<'_, Box<dyn Any>>) -> Result<Self, ()> {
+        if inputs.deref_iter().all(CommandInput::is) {
+            let commands = inputs
+                .consume()
+                .map(CommandInput::downcast)
+                .map(Result::unwrap);
             // TODO: capacity might be calculable by summing all size_hints
             let mut acc = Vec::new();
             for command in commands {
@@ -65,11 +47,10 @@ impl FromAny for ScreenInput {
             Err(())
         }
     }
-}
 
-impl nodes::InputSupplemental for ScreenInput {
-    fn types(names: &'static [&str]) -> Vec<InputGroup<'static>> {
-        std::array::IntoIter::new(command_types())
+    fn possible_inputs(names: &'static [&str]) -> PossibleInputs<'static> {
+        let groups = CommandInput::type_ids()
+            .into_iter()
             .map(|type_id| InputGroup {
                 info: vec![nodes::InputInfo {
                     name: names[0].into(),
@@ -78,35 +59,35 @@ impl nodes::InputSupplemental for ScreenInput {
                 }]
                 .into(),
             })
-            .collect()
+            .collect::<Vec<_>>();
+        PossibleInputs::new(groups)
     }
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct ScreenNode;
 
-impl NodeInput for ScreenNode {
+impl nodes::NodeInput for ScreenNode {
     fn variadic(&self) -> bool {
         true
     }
 
     fn inputs(&self) -> PossibleInputs<'static> {
-        use nodes::InputSupplemental;
         use once_cell::sync::Lazy;
-        static GROUPS: Lazy<Vec<nodes::InputGroup<'static>>> =
-            Lazy::new(|| ScreenInput::types(&["command"]));
-        PossibleInputs::new(&*GROUPS)
+        static CACHE: Lazy<PossibleInputs> =
+            Lazy::new(|| ScreenInput::possible_inputs(&["command"]));
+        PossibleInputs::new(&*CACHE.groups)
     }
 }
 
-impl NodeOutput for ScreenNode {
+impl nodes::NodeOutput for ScreenNode {
     fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
-        nodes::FromAny::from_any(inputs).map(op)
+        nodes::FromAnyProto::from_any(nodes::InputStack::new(inputs, ..)).map(op)
     }
 }
 
 #[typetag::serde]
-impl Node for ScreenNode {
+impl nodes::Node for ScreenNode {
     fn name(&self) -> &'static str {
         "screen"
     }

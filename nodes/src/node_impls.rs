@@ -24,7 +24,7 @@ pub use sin_cos::{CosNode, SineNode};
 pub use to_float::ToFloatNode;
 
 pub mod generic {
-    use crate::{FromAny, InputComponent, InputGroup, InputSupplemental, OneOrMany};
+    use crate::{InputComponent, InputGroup};
     use std::any::{Any, TypeId};
 
     macro_rules! count_idents {
@@ -40,48 +40,6 @@ pub mod generic {
 
     macro_rules! tuple_impl {
         ($( $name:ident )+) => {
-            impl<$($name: 'static),+> FromAny for ($(OneOrMany<$name>,)+) {
-                fn from_any(inputs: &mut Vec<Box<dyn Any>>) -> Result<Self, ()> {
-                    let len = count_idents!($($name, )+);
-                    if inputs.len() < len {
-                        return Err(())
-                    }
-
-                    let mut checker = inputs.iter();
-                    $(
-                        if !OneOrMany::<$name>::is(&**checker.next().unwrap()) {
-                            return Err(())
-                        }
-                    )+
-
-                    let mut inputs = inputs.drain(0..len);
-                    Ok(($(
-                        OneOrMany::<$name>::downcast(inputs.next().unwrap()).unwrap(),
-                    )+))
-                }
-            }
-
-            impl<$($name: 'static + Clone + std::fmt::Debug),+> InputSupplemental for ($(OneOrMany<$name>,)+) {
-                fn types(names: &'static [&str]) -> Vec<InputGroup<'static>> {
-                    use itertools::Itertools;
-                    let groups = std::array::IntoIter::new([$(OneOrMany::<$name>::type_ids(),)+])
-                        .map(|v| std::array::IntoIter::new(v))
-                        .multi_cartesian_product()
-                        .map(|types| InputGroup {
-                            info: std::array::IntoIter::new([$(std::any::type_name::<$name>(),)+])
-                            .zip(names.iter().copied().zip(types))
-                            .map(|(ty_name, (name, type_id))| crate::InputInfo {
-                                name: name.into(),
-                                ty_name,
-                                type_id,
-                            })
-                            .collect(),
-                        })
-                        .collect::<Vec<_>>();
-                    groups
-                }
-            }
-
             impl<$($name: 'static),+> InputComponent for ($($name,)+) {
                 fn is(v: &dyn Any) -> bool {
                     v.is::<($($name,)+)>()

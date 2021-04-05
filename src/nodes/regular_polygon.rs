@@ -1,4 +1,4 @@
-use nodes::{InputGroup, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
+use nodes::{FromAnyProto, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
 use solstice_2d::RegularPolygon;
 use std::any::Any;
 
@@ -18,17 +18,17 @@ pub struct RegularPolygonNode;
 
 impl NodeInput for RegularPolygonNode {
     fn inputs(&self) -> PossibleInputs<'static> {
-        use nodes::InputSupplemental;
         use once_cell::sync::Lazy;
-        static GROUPS: Lazy<Vec<InputGroup<'static>>> =
-            Lazy::new(|| RegularPolygonInput::types(&["x", "y", "vertex_count", "radius"]));
-        PossibleInputs::new(&*GROUPS)
+        static CACHE: Lazy<PossibleInputs> = Lazy::new(|| {
+            RegularPolygonInput::possible_inputs(&["x", "y", "vertex_count", "radius"])
+        });
+        PossibleInputs::new(&*CACHE.groups)
     }
 }
 
 impl NodeOutput for RegularPolygonNode {
     fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
-        nodes::FromAny::from_any(inputs).map(op)
+        FromAnyProto::from_any(nodes::InputStack::new(inputs, ..)).map(op)
     }
 }
 

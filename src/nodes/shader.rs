@@ -1,4 +1,4 @@
-use nodes::{FromAny, Node, NodeInput, NodeOutput, One, PossibleInputs};
+use nodes::{FromAnyProto, InputStack, Node, NodeInput, NodeOutput, One, PossibleInputs};
 use solstice_2d::solstice::shader::RawUniformValue;
 use std::any::Any;
 
@@ -127,14 +127,20 @@ fn parse_uniforms(src: &str) -> impl Iterator<Item = Uniform> {
 
 type ShaderInput = crate::command::Shader;
 
-impl FromAny for ShaderInput {
-    fn from_any(inputs: &mut Vec<Box<dyn Any>>) -> Result<Self, ()> {
-        if let Some(src) = inputs.get(0) {
+impl FromAnyProto for ShaderInput {
+    fn from_any(inputs: nodes::InputStack<'_, Box<dyn Any>>) -> Result<Self, ()> {
+        if let Some(src) = inputs.as_slice().get(0) {
             if src.is::<One<String>>() {
-                let source = inputs.remove(0).downcast::<One<String>>().unwrap().inner();
+                let mut inputs = inputs.consume();
+                let source = inputs
+                    .next()
+                    .unwrap()
+                    .downcast::<One<String>>()
+                    .unwrap()
+                    .inner();
                 // TODO: need idempotent check first
                 let uniforms = parse_uniforms(&source)
-                    .zip(inputs.drain(..))
+                    .zip(inputs)
                     .map(|(uniform, input)| {
                         let v = uniform.ty.downcast(input)?;
                         Ok((uniform.name.to_owned(), v))
@@ -148,6 +154,10 @@ impl FromAny for ShaderInput {
         } else {
             Err(())
         }
+    }
+
+    fn possible_inputs(_names: &'static [&str]) -> PossibleInputs<'static> {
+        todo!()
     }
 }
 
@@ -199,7 +209,7 @@ impl NodeInput for ShaderNode {
 
 impl NodeOutput for ShaderNode {
     fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
-        let r = ShaderInput::from_any(inputs);
+        let r = ShaderInput::from_any(InputStack::new(inputs, ..));
         if let Ok(v) = &r {
             self.src.replace(Some(v.source.clone()));
         }

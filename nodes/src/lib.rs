@@ -74,12 +74,6 @@ impl<T> Many<T> {
     }
 }
 
-pub trait FromAny {
-    fn from_any(inputs: &mut Vec<Box<dyn std::any::Any>>) -> Result<Self, ()>
-    where
-        Self: Sized;
-}
-
 pub trait FromAnyProto {
     fn from_any(inputs: InputStack<'_, Box<dyn Any>>) -> Result<Self, ()>
     where
@@ -235,10 +229,6 @@ where
     }
 }
 
-pub trait InputSupplemental {
-    fn types(names: &'static [&str]) -> Vec<InputGroup<'static>>;
-}
-
 pub trait InputComponent {
     fn is(v: &dyn std::any::Any) -> bool;
     fn type_ids() -> Vec<std::any::TypeId>;
@@ -265,60 +255,7 @@ where
     }
 }
 
-impl<T: 'static> FromAny for OneOrMany<T> {
-    fn from_any(inputs: &mut Vec<Box<dyn Any>>) -> Result<Self, ()>
-    where
-        Self: Sized,
-    {
-        if let Some(input) = inputs.get(0) {
-            let input = &**input;
-            if input.is::<OneOrMany<T>>() {
-                Ok(*inputs.remove(0).downcast::<OneOrMany<T>>().unwrap())
-            } else if input.is::<One<T>>() {
-                let v = *inputs.remove(0).downcast::<One<T>>().unwrap();
-                Ok(OneOrMany::One(v))
-            } else if input.is::<Many<T>>() {
-                let v = *inputs.remove(0).downcast::<Many<T>>().unwrap();
-                Ok(OneOrMany::Many(v))
-            } else {
-                Err(())
-            }
-        } else {
-            Err(())
-        }
-    }
-}
-
 impl<T: 'static> OneOrMany<T> {
-    pub fn is(v: &dyn Any) -> bool {
-        let v = v.type_id();
-        std::array::IntoIter::new(Self::type_ids()).any(|t| t == v)
-    }
-
-    pub fn downcast(v: Box<dyn Any>) -> Result<Self, Box<dyn Any>> {
-        fn take<T>(b: Box<T>) -> T {
-            *b
-        }
-
-        if v.is::<Self>() {
-            v.downcast::<Self>().map(take)
-        } else if v.is::<Many<T>>() {
-            v.downcast::<Many<T>>().map(take).map(OneOrMany::Many)
-        } else if v.is::<One<T>>() {
-            v.downcast::<One<T>>().map(take).map(OneOrMany::One)
-        } else {
-            Err(v)
-        }
-    }
-
-    pub fn type_ids() -> [std::any::TypeId; 3] {
-        [
-            TypeId::of::<Self>(),
-            TypeId::of::<One<T>>(),
-            TypeId::of::<Many<T>>(),
-        ]
-    }
-
     pub fn into_boxed_inner(self) -> Box<dyn Any> {
         match self {
             OneOrMany::One(inner) => Box::new(inner),

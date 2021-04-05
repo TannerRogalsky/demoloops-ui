@@ -1,4 +1,4 @@
-use nodes::{InputGroup, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
+use nodes::{FromAnyProto, InputStack, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
 use solstice_2d::Color;
 use std::any::Any;
 
@@ -60,17 +60,16 @@ pub struct HSLNode;
 
 impl NodeInput for HSLNode {
     fn inputs(&self) -> PossibleInputs<'static> {
-        use nodes::InputSupplemental;
         use once_cell::sync::Lazy;
-        static GROUPS: Lazy<Vec<InputGroup<'static>>> =
-            Lazy::new(|| HSLInput::types(&["hue", "saturation", "light"]));
-        PossibleInputs::new(&*GROUPS)
+        static CACHE: Lazy<PossibleInputs> =
+            Lazy::new(|| HSLInput::possible_inputs(&["hue", "saturation", "light"]));
+        PossibleInputs::new(&*CACHE.groups)
     }
 }
 
 impl NodeOutput for HSLNode {
     fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
-        nodes::FromAny::from_any(inputs).map(op)
+        FromAnyProto::from_any(InputStack::new(inputs, ..)).map(op)
     }
 }
 

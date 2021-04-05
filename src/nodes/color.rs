@@ -1,4 +1,4 @@
-use nodes::{InputGroup, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
+use nodes::{FromAnyProto, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
 use solstice_2d::Color;
 use std::any::Any;
 
@@ -18,17 +18,16 @@ pub struct ColorNode;
 
 impl NodeInput for ColorNode {
     fn inputs(&self) -> PossibleInputs<'static> {
-        use nodes::InputSupplemental;
         use once_cell::sync::Lazy;
-        static GROUPS: Lazy<Vec<InputGroup<'static>>> =
-            Lazy::new(|| ColorInput::types(&["red", "green", "blue", "alpha"]));
-        PossibleInputs::new(&*GROUPS)
+        static CACHE: Lazy<PossibleInputs> =
+            Lazy::new(|| ColorInput::possible_inputs(&["red", "green", "blue", "alpha"]));
+        PossibleInputs::new(&*CACHE.groups)
     }
 }
 
 impl NodeOutput for ColorNode {
     fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
-        nodes::FromAny::from_any(inputs).map(op)
+        FromAnyProto::from_any(nodes::InputStack::new(inputs, ..)).map(op)
     }
 }
 
