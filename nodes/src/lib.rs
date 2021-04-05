@@ -1,7 +1,10 @@
-mod input_stack;
-mod nodes;
+// To allow internal crate references from proc-macro. https://github.com/rust-lang/rust/issues/56409
+extern crate self as nodes;
 
-pub use self::nodes::*;
+mod input_stack;
+mod node_impls;
+
+pub use self::node_impls::*;
 pub use input_stack::*;
 pub use itertools::Itertools;
 pub use nodes_derive::{FromAnyProto, InputComponent};

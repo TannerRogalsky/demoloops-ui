@@ -1,5 +1,5 @@
 use crate::command;
-use nodes::{InputGroup, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
+use nodes::{Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
 use solstice_2d::{Color, PerlinTextureSettings, Rectangle, RegularPolygon};
 
 #[derive(nodes::InputComponent, nodes::FromAnyProto)]

@@ -1,4 +1,5 @@
 mod add;
+mod arithmetic;
 mod constant;
 mod division;
 mod global;
@@ -23,8 +24,8 @@ pub use sin_cos::{CosNode, SineNode};
 pub use to_float::ToFloatNode;
 
 pub mod generic {
-    use crate::{FromAny, InputGroup, InputSupplemental, OneOrMany};
-    use std::any::Any;
+    use crate::{FromAny, InputComponent, InputGroup, InputSupplemental, OneOrMany};
+    use std::any::{Any, TypeId};
 
     macro_rules! count_idents {
         ($($idents:ident),* $(,)*) => {
@@ -78,6 +79,59 @@ pub mod generic {
                         })
                         .collect::<Vec<_>>();
                     groups
+                }
+            }
+
+            impl<$($name: 'static),+> InputComponent for ($($name,)+) {
+                fn is(v: &dyn Any) -> bool {
+                    v.is::<($($name,)+)>()
+                }
+
+                fn type_ids() -> Vec<TypeId> {
+                    vec![TypeId::of::<($($name,)+)>()]
+                }
+
+                fn downcast(v: Box<dyn Any>) -> Result<Self, Box<dyn Any>> {
+                    v.downcast::<($($name,)+)>().map(|v| *v)
+
+                }
+            }
+
+            impl<$($name: InputComponent),+> crate::FromAnyProto for ($($name,)+) {
+                fn from_any(inputs: crate::InputStack<'_, Box<dyn std::any::Any>>) -> Result<Self, ()> {
+                    let len = count_idents!($($name,)+);
+                    if inputs.as_slice().len() != len {
+                        return Err(())
+                    }
+
+                    let mut checker = inputs.deref_iter();
+                    $(
+                        if !<$name>::is(checker.next().unwrap()) {
+                            return Err(())
+                        }
+                    )+
+
+                    let mut inputs = inputs.consume();
+                    Ok(($(
+                        <$name>::downcast(inputs.next().unwrap()).unwrap(),
+                    )+))
+                }
+                fn possible_inputs(names: &'static [&str]) -> crate::PossibleInputs<'static> {
+                    use itertools::Itertools;
+                    let groups = std::array::IntoIter::new([$(<$name>::type_ids(),)+])
+                        .multi_cartesian_product()
+                        .map(|types| InputGroup {
+                            info: std::array::IntoIter::new([$(std::any::type_name::<$name>(),)+])
+                            .zip(names.iter().copied().zip(types))
+                            .map(|(ty_name, (name, type_id))| crate::InputInfo {
+                                name: name.into(),
+                                ty_name,
+                                type_id,
+                            })
+                            .collect(),
+                        })
+                        .collect::<Vec<_>>();
+                    crate::PossibleInputs::new(groups)
                 }
             }
         };

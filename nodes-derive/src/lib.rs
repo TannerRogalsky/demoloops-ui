@@ -53,7 +53,7 @@ pub fn derive_from_any(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
                         use ::nodes::Itertools;
                         let groups = std::array::IntoIter::new([#(<#types as ::nodes::InputComponent>::type_ids()),*])
                             .multi_cartesian_product()
-                            .map(|types| InputGroup {
+                            .map(|types| ::nodes::InputGroup {
                                 info: std::array::IntoIter::new([#(std::any::type_name::<#types>()),*])
                                 .zip(names.iter().copied().zip(types))
                                 .map(|(ty_name, (name, type_id))| ::nodes::InputInfo {
@@ -101,7 +101,7 @@ pub fn derive_from_any(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
                         use ::nodes::Itertools;
                         let groups = std::array::IntoIter::new([#(<#fields>::possible_inputs(names)), *])
                             .flat_map(|p| p.groups.into_owned().into_iter())
-                            .collect::<Vec<InputGroup>>();
+                            .collect::<Vec<::nodes::InputGroup>>();
                         PossibleInputs::new(groups)
                     }
                 }
