@@ -85,6 +85,7 @@ pub mod generic {
                                 name: name.into(),
                                 ty_name,
                                 type_id,
+                                optional: false,
                             })
                             .collect(),
                         })
@@ -107,30 +108,34 @@ pub mod generic {
 
 #[cfg(test)]
 mod tests {
-    use crate::{FromAny, InputSupplemental, Many, One, OneOrMany};
+    use crate::{FromAnyProto, InputStack, Many, One, OneOrMany};
     use std::any::{Any, TypeId};
 
     #[test]
     fn tuples() {
-        let input_info = <(OneOrMany<u32>,)>::types(&["value"]);
+        let input_info = <(OneOrMany<u32>,)>::possible_inputs(&["value"]);
         assert_eq!(
             vec![
                 TypeId::of::<OneOrMany<u32>>(),
                 TypeId::of::<One<u32>>(),
                 TypeId::of::<Many<u32>>()
-            ],
+            ]
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>(),
             input_info
+                .groups
                 .iter()
                 .map(|group| group.info[0].type_id)
-                .collect::<Vec<_>>()
+                .collect::<std::collections::HashSet<_>>()
         );
-        let input_info = <(OneOrMany<u32>, OneOrMany<u32>)>::types(&["lhs", "rhs"]);
-        assert_eq!(input_info.len(), 9);
+        let input_info = <(OneOrMany<u32>, OneOrMany<u32>)>::possible_inputs(&["lhs", "rhs"]);
+        assert_eq!(input_info.groups.len(), 9);
 
         let mut inputs: Vec<Box<dyn Any>> = vec![];
         inputs.push(Box::new(One::new(1f32)));
         inputs.push(Box::new(One::new(2f32)));
-        let v: (OneOrMany<f32>, OneOrMany<f32>) = FromAny::from_any(&mut inputs).unwrap();
+        let v: (OneOrMany<f32>, OneOrMany<f32>) =
+            FromAnyProto::from_any(InputStack::new(&mut inputs, ..)).unwrap();
         assert_eq!(
             (
                 OneOrMany::One(One::new(1f32)),
@@ -143,7 +148,7 @@ mod tests {
         inputs.push(Box::new(One::new(2u32)));
         inputs.push(Box::new(One::new(3u32)));
         let v: (OneOrMany<u32>, OneOrMany<u32>, OneOrMany<u32>) =
-            FromAny::from_any(&mut inputs).unwrap();
+            FromAnyProto::from_any(InputStack::new(&mut inputs, ..)).unwrap();
         assert_eq!(
             (
                 OneOrMany::One(One::new(1u32)),

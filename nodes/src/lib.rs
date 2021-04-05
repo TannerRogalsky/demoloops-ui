@@ -163,6 +163,7 @@ impl<T: 'static> FromAnyProto for One<T> {
                 name: names[0].into(),
                 ty_name: std::any::type_name::<T>(),
                 type_id: TypeId::of::<One<T>>(),
+                optional: false,
             }]
             .into(),
         }])
@@ -188,16 +189,14 @@ impl<T: 'static> FromAnyProto for Many<T> {
                 name: names[0].into(),
                 ty_name: std::any::type_name::<T>(),
                 type_id: TypeId::of::<Many<T>>(),
+                optional: false,
             }]
             .into(),
         }])
     }
 }
 
-impl<T> FromAnyProto for OneOrMany<T>
-where
-    T: 'static,
-{
+impl<T: 'static> FromAnyProto for OneOrMany<T> {
     fn from_any(mut inputs: InputStack<'_, Box<dyn Any>>) -> Result<Self, ()> {
         if let Ok(v) = Many::<T>::from_any(inputs.sub(..1)) {
             Ok(OneOrMany::Many(v))
@@ -216,6 +215,7 @@ where
                 name: names[0].into(),
                 ty_name: std::any::type_name::<T>(),
                 type_id: TypeId::of::<OneOrMany<T>>(),
+                optional: false,
             }]
             .into(),
         }]);
@@ -229,12 +229,58 @@ where
     }
 }
 
-pub trait InputComponent {
+impl<T: InputComponent + 'static> InputComponent<T> for Option<T> {
+    fn is(v: &dyn Any) -> bool {
+        v.is::<Self>() || T::is(v)
+    }
+
+    fn type_ids() -> Vec<TypeId> {
+        let mut acc = T::type_ids();
+        acc.push(TypeId::of::<Self>());
+        acc
+    }
+
+    fn is_optional() -> bool {
+        true
+    }
+
+    fn downcast(v: Box<dyn Any>) -> Result<T, Box<dyn Any>> {
+        match T::downcast(v) {
+            Ok(v) => return Ok(v),
+            Err(v) => v.downcast().map(|v| *v),
+        }
+    }
+}
+
+impl<T: FromAnyProto + 'static> FromAnyProto for Option<T> {
+    fn from_any(inputs: InputStack<'_, Box<dyn Any>>) -> Result<Self, ()> {
+        if inputs.as_slice().len() == 0 {
+            Ok(None)
+        } else {
+            T::from_any(inputs).map(Some)
+        }
+    }
+
+    fn possible_inputs(names: &'static [&str]) -> PossibleInputs<'static> {
+        let mut inputs = T::possible_inputs(names);
+        for group in inputs.groups.to_mut().iter_mut() {
+            for info in group.info.to_mut().iter_mut() {
+                info.optional = true;
+            }
+        }
+        inputs
+    }
+}
+
+pub trait InputComponent<Out = Self> {
     fn is(v: &dyn std::any::Any) -> bool;
     fn type_ids() -> Vec<std::any::TypeId>;
-    fn downcast(v: Box<dyn std::any::Any>) -> Result<Self, Box<dyn std::any::Any>>
+    fn is_optional() -> bool {
+        false
+    }
+    fn downcast(v: Box<dyn std::any::Any>) -> Result<Out, Box<dyn std::any::Any>>
     where
-        Self: Sized;
+        Out: Sized;
 }
 
 #[derive(Debug, Clone)]
@@ -370,6 +416,7 @@ pub struct InputInfo<'a> {
     pub name: std::borrow::Cow<'a, str>,
     pub ty_name: &'static str,
     pub type_id: std::any::TypeId,
+    pub optional: bool,
 }
 
 // Success is matching any of these

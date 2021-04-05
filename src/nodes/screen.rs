@@ -56,6 +56,7 @@ impl FromAnyProto for ScreenInput {
                     name: names[0].into(),
                     ty_name: "Command",
                     type_id,
+                    optional: false,
                 }]
                 .into(),
             })

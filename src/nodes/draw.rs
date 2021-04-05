@@ -9,33 +9,28 @@ enum Geometry {
 }
 
 #[derive(nodes::InputComponent, nodes::FromAnyProto)]
-enum Texture {
-    Noise(OneOrMany<PerlinTextureSettings>),
-    Default(OneOrMany<command::DefaultTexture>),
-}
-
-#[derive(nodes::InputComponent, nodes::FromAnyProto)]
 struct DrawNodeInput {
     geometry: Geometry,
-    color: OneOrMany<Color>,
-    texture: Texture,
+    color: Option<OneOrMany<Color>>,
+    texture: Option<OneOrMany<PerlinTextureSettings>>,
 }
 
 impl DrawNodeInput {
     fn op(self) -> Box<dyn std::any::Any> {
         use nodes::one_many::op3 as op;
-        match (self.geometry, self.texture) {
-            (Geometry::Rectangle(geometry), Texture::Noise(texture)) => {
-                op(geometry, self.color, texture, command::DrawCommand::new)
+        let color = self
+            .color
+            .unwrap_or(OneOrMany::One(nodes::One::new(Color::new(1., 1., 1., 1.))));
+        let texture = match self.texture {
+            None => OneOrMany::One(nodes::One::new(None)),
+            Some(noise) => nodes::one_many::op1(noise, |v| Some(v)),
+        };
+        match self.geometry {
+            Geometry::Rectangle(geometry) => {
+                op(geometry, color, texture, command::DrawCommand::new)
             }
-            (Geometry::RegularPolygon(geometry), Texture::Noise(texture)) => {
-                op(geometry, self.color, texture, command::DrawCommand::new)
-            }
-            (Geometry::Rectangle(geometry), Texture::Default(texture)) => {
-                op(geometry, self.color, texture, command::DrawCommand::new)
-            }
-            (Geometry::RegularPolygon(geometry), Texture::Default(texture)) => {
-                op(geometry, self.color, texture, command::DrawCommand::new)
+            Geometry::RegularPolygon(geometry) => {
+                op(geometry, color, texture, command::DrawCommand::new)
             }
         }
         .into_boxed_inner()

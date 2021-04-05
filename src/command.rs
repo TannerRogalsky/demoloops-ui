@@ -25,24 +25,18 @@ impl Into<Geometry> for RegularPolygon {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct DefaultTexture;
-
 #[derive(Debug, Clone)]
 pub enum Texture {
     Noise(PerlinTextureSettings),
-    Default(DefaultTexture),
+    Default,
 }
 
-impl Into<Texture> for PerlinTextureSettings {
+impl Into<Texture> for Option<PerlinTextureSettings> {
     fn into(self) -> Texture {
-        Texture::Noise(self)
-    }
-}
-
-impl Into<Texture> for DefaultTexture {
-    fn into(self) -> Texture {
-        Texture::Default(self)
+        match self {
+            None => Texture::Default,
+            Some(v) => Texture::Noise(v),
+        }
     }
 }
 
@@ -124,7 +118,7 @@ impl Command {
     pub fn execute(&self, gfx: &mut GraphicsLock, cache: &ResourcesCache) {
         match self {
             Command::Draw(command) => match &command.texture {
-                Texture::Default(_) => match command.geometry {
+                Texture::Default => match command.geometry {
                     Geometry::Rectangle(geometry) => gfx.draw_with_color(geometry, command.color),
                     Geometry::RegularPolygon(geometry) => {
                         gfx.draw_with_color(geometry, command.color)

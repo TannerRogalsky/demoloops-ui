@@ -179,11 +179,13 @@ impl NodeInput for ShaderNode {
                 name: "shader text".into(),
                 ty_name: "String",
                 type_id: std::any::TypeId::of::<One<String>>(),
+                optional: false,
             });
             let uniforms_input = parse_uniforms(src).map(|uniform| InputInfo {
                 name: uniform.name.to_owned().into(),
                 ty_name: uniform.ty.into(),
                 type_id: std::any::TypeId::of::<Uniform>(),
+                optional: false,
             });
             let uniforms = source_input.chain(uniforms_input).collect::<Vec<_>>();
             let input_groups = vec![InputGroup {
@@ -198,6 +200,7 @@ impl NodeInput for ShaderNode {
                         name: "shader text".into(),
                         ty_name: "String",
                         type_id: std::any::TypeId::of::<One<String>>(),
+                        optional: false,
                     }]
                     .into(),
                 }]

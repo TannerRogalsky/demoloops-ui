@@ -222,7 +222,14 @@ impl UIGraph {
                 if let Some(input_group) = node.inputs().groups.iter().next() {
                     let mut draw_input = |info: &::nodes::InputInfo, index: usize| {
                         let rect: Rectangle = metadata.input(index);
-                        g.draw_with_color(rect, Color::new(0., 0., 1., 1.));
+
+                        let color = if info.optional {
+                            Color::new(0., 0.5, 1., 1.)
+                        } else {
+                            Color::new(0., 0., 1., 1.)
+                        };
+
+                        g.draw_with_color(rect, color);
                         g.stroke_with_color(rect, black);
                         let text_bounds = Rectangle {
                             x: rect.x + 5.,

@@ -16,7 +16,7 @@ impl nodes::NodeInput for WhiteTextureNode {
 
 impl nodes::NodeOutput for WhiteTextureNode {
     fn op(&self, _inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
-        Ok(Box::new(One::new(crate::command::DefaultTexture)))
+        Ok(Box::new(One::new(crate::command::Texture::Default)))
     }
 }
 

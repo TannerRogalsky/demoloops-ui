@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use syn::{Data, DeriveInput};
+use syn::{Data, DeriveInput, Type};
 
 #[proc_macro_derive(FromAnyProto)]
 #[proc_macro_error::proc_macro_error]
@@ -26,40 +26,69 @@ pub fn derive_from_any(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
                 .map(|field| &field.ty)
                 .collect::<Vec<_>>();
 
-            let count = data.fields.len();
+            let is_option = types.iter().map(|t| match t {
+                Type::Path(path) => path.path.segments.last().unwrap().ident == "Option",
+                _ => false,
+            });
+
+            let downcasts = types.iter().zip(is_option).map(|(ty, is_option)| {
+                if is_option {
+                    quote::quote! {
+                        inputs.next().map(|ty| <#ty>::downcast(ty).unwrap())
+                    }
+                } else {
+                    quote::quote! {
+                        <#ty>::downcast(inputs.next().unwrap()).unwrap()
+                    }
+                }
+            });
 
             quote::quote! {
                 impl #impl_generics ::nodes::FromAnyProto for #ident #ty_generics #where_clause {
                     fn from_any(inputs: ::nodes::InputStack<'_, Box<dyn std::any::Any>>) -> Result<Self, ()> {
                         use ::nodes::InputComponent;
 
-                        if inputs.as_slice().len() < #count {
-                            eprintln!("{} < {}", inputs.as_slice().len(), #count);
+                        let required = [#(<#types>::is_optional(),)*];
+                        let required_count = required.iter().copied().filter(|v| !*v).count();
+
+                        if inputs.as_slice().len() < required_count {
+                            eprintln!("{} < {}", inputs.as_slice().len(), required_count);
                             return Err(());
                         }
 
+                        let mut is_optional = required.iter().copied();
                         let mut checker = inputs.deref_iter();
-                        #(if !<#types>::is(checker.next().unwrap()) {
-                            eprintln!("{}", std::any::type_name::<#types>());
+                        #(if !is_optional.next().unwrap() && !<#types>::is(checker.next().unwrap()) {
+                            eprintln!("Type Mismatch: {}", std::any::type_name::<#types>());
                             return Err(());
                         })*
 
                         let mut inputs = inputs.consume();
                         Ok(#ident {#(
-                            #fields: <#types>::downcast(inputs.next().unwrap()).unwrap(),
+                            #fields: #downcasts,
+                            // #fields: {
+                            //     // let v = conditional_downcast::<#types>(inputs.next());
+                            //     let v = <#types>::downcast(inputs.next().unwrap()).unwrap();
+                            //     if !<#types>::is_optional() {
+                            //         v
+                            //     } else {
+                            //         Some(v)
+                            //     }
+                            // },
                         )*})
                     }
                     fn possible_inputs(names: &'static [&str]) -> ::nodes::PossibleInputs<'static> {
-                        use ::nodes::Itertools;
-                        let groups = std::array::IntoIter::new([#(<#types as ::nodes::InputComponent>::type_ids()),*])
+                        use ::nodes::{Itertools, InputComponent};
+                        let groups = std::array::IntoIter::new([#(<#types>::type_ids()),*])
                             .multi_cartesian_product()
                             .map(|types| ::nodes::InputGroup {
-                                info: std::array::IntoIter::new([#(std::any::type_name::<#types>()),*])
+                                info: std::array::IntoIter::new([#((std::any::type_name::<#types>(), <#types>::is_optional())),*])
                                 .zip(names.iter().copied().zip(types))
-                                .map(|(ty_name, (name, type_id))| ::nodes::InputInfo {
+                                .map(|((ty_name, optional), (name, type_id))| ::nodes::InputInfo {
                                     name: name.into(),
                                     ty_name,
                                     type_id,
+                                    optional,
                                 })
                                 .collect(),
                             })
@@ -80,7 +109,6 @@ pub fn derive_from_any(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
                 })
                 .collect::<Vec<_>>();
 
-            let count = data.variants.len();
             let fields = all.iter().map(|(_, field)| field);
 
             let downcasts = all.iter().map(|(variant, field)| {

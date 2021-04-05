@@ -1,11 +1,20 @@
-use nodes::{FromAnyProto, InputStack, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
+use nodes::{FromAnyProto, InputComponent, InputStack, OneOrMany, PossibleInputs};
 use solstice_2d::PerlinTextureSettings;
 use std::any::Any;
 
-type NoiseTextureInput = (OneOrMany<u32>, OneOrMany<u32>, OneOrMany<u32>);
+#[derive(FromAnyProto, InputComponent)]
+struct NoiseTextureInput {
+    seed: Option<OneOrMany<u32>>,
+    width: Option<OneOrMany<u32>>,
+    height: Option<OneOrMany<u32>>,
+}
 
-fn op((seed, width, height): NoiseTextureInput) -> Box<dyn Any> {
-    nodes::one_many::op3(seed, width, height, |seed, width, height| {
+fn op(v: NoiseTextureInput) -> Box<dyn Any> {
+    use nodes::one_many::op3;
+    let seed = v.seed.unwrap_or(OneOrMany::One(nodes::One::new(0)));
+    let width = v.width.unwrap_or(OneOrMany::One(nodes::One::new(64)));
+    let height = v.height.unwrap_or(OneOrMany::One(nodes::One::new(64)));
+    op3(seed, width, height, |seed, width, height| {
         PerlinTextureSettings {
             seed: seed as _,
             width: width as _,
@@ -22,7 +31,7 @@ fn op((seed, width, height): NoiseTextureInput) -> Box<dyn Any> {
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct NoiseTextureNode;
 
-impl NodeInput for NoiseTextureNode {
+impl nodes::NodeInput for NoiseTextureNode {
     fn inputs(&self) -> PossibleInputs<'static> {
         use once_cell::sync::Lazy;
         static CACHE: Lazy<PossibleInputs> =
@@ -31,14 +40,14 @@ impl NodeInput for NoiseTextureNode {
     }
 }
 
-impl NodeOutput for NoiseTextureNode {
+impl nodes::NodeOutput for NoiseTextureNode {
     fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
         FromAnyProto::from_any(InputStack::new(inputs, ..)).map(op)
     }
 }
 
 #[typetag::serde]
-impl Node for NoiseTextureNode {
+impl nodes::Node for NoiseTextureNode {
     fn name(&self) -> &'static str {
         "noise"
     }
