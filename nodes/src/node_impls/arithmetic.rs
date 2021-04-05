@@ -89,6 +89,54 @@ impl ArithmeticNodeInput {
         }
     }
 
+    pub fn rem(self) -> Box<dyn Any> {
+        match self {
+            ArithmeticNodeInput::F32F32(v) => Pair::from(v).opf(std::ops::Rem::rem),
+            ArithmeticNodeInput::U32U32(v) => {
+                Pair::from(v).opf(|lhs, rhs| lhs.checked_rem(rhs).unwrap_or(0))
+            }
+            ArithmeticNodeInput::F32U32(v) => {
+                Pair::from(v).op_right(|v| v as f32).opf(std::ops::Rem::rem)
+            }
+            ArithmeticNodeInput::U32F32(v) => {
+                Pair::from(v).op_left(|v| v as f32).opf(std::ops::Rem::rem)
+            }
+        }
+    }
+
+    pub fn add(self) -> Box<dyn Any> {
+        match self {
+            ArithmeticNodeInput::F32F32(v) => Pair::from(v).opf(std::ops::Add::add),
+            ArithmeticNodeInput::U32U32(v) => Pair::from(v).opf(std::ops::Add::add),
+            ArithmeticNodeInput::F32U32(v) => {
+                Pair::from(v).op_right(|v| v as f32).opf(std::ops::Add::add)
+            }
+            ArithmeticNodeInput::U32F32(v) => {
+                Pair::from(v).op_left(|v| v as f32).opf(std::ops::Add::add)
+            }
+        }
+    }
+
+    pub fn ratio(self) -> Box<dyn Any> {
+        fn inner(count: f32, length: f32) -> f32 {
+            (count % length) / length
+        }
+
+        match self {
+            ArithmeticNodeInput::F32F32(v) => Pair::from(v).opf(inner),
+            ArithmeticNodeInput::U32U32(v) => Pair::from(v).opf(|count, length| {
+                if length == 0 {
+                    0.
+                } else {
+                    let remainder = count % length;
+                    (remainder as f64 / length as f64) as f32
+                }
+            }),
+            ArithmeticNodeInput::F32U32(v) => Pair::from(v).op_right(|v| v as f32).opf(inner),
+            ArithmeticNodeInput::U32F32(v) => Pair::from(v).op_left(|v| v as f32).opf(inner),
+        }
+    }
+
     pub fn types() -> PossibleInputs<'static> {
         use once_cell::sync::Lazy;
         static CACHE: Lazy<PossibleInputs> =

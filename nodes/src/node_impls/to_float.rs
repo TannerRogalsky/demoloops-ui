@@ -9,14 +9,11 @@ enum Input {
 impl Input {
     fn op(self) -> Box<dyn Any> {
         use crate::one_many::op1;
-        let v = match self {
+        match self {
             Input::U32(v) => op1(v, |v| v as f32),
             Input::F32(v) => v,
-        };
-        match v {
-            OneOrMany::One(v) => Box::new(v),
-            OneOrMany::Many(v) => Box::new(v),
         }
+        .into_boxed_inner()
     }
 }
 

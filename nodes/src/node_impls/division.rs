@@ -7,7 +7,11 @@ pub struct DivisionNode;
 
 impl crate::NodeInput for DivisionNode {
     fn inputs(&self) -> PossibleInputs<'static> {
-        ArithmeticNodeInput::types()
+        use crate::FromAnyProto;
+        use once_cell::sync::Lazy;
+        static CACHE: Lazy<PossibleInputs> =
+            Lazy::new(|| ArithmeticNodeInput::possible_inputs(&["numerator", "denominator"]));
+        PossibleInputs::new(&*CACHE.groups)
     }
 }
 

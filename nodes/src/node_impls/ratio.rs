@@ -1,69 +1,28 @@
-use crate::{FromAny, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
+use super::arithmetic::ArithmeticNodeInput;
+use crate::{InputStack, PossibleInputs};
 use std::any::Any;
 
-type F32F32 = (OneOrMany<f32>, OneOrMany<f32>);
-type U32U32 = (OneOrMany<u32>, OneOrMany<u32>);
-
-enum RatioGroup {
-    F32(F32F32),
-    U32(U32U32),
-}
-
-impl RatioGroup {
-    fn op(self) -> Box<dyn Any> {
-        use crate::one_many::op2_tuple;
-        match self {
-            RatioGroup::F32(v) => op2_tuple(v, |count, length| {
-                let remainder = count % length;
-                remainder / length
-            })
-            .into_boxed_inner(),
-            RatioGroup::U32(v) => op2_tuple(v, |count, length| {
-                if length == 0 {
-                    0.
-                } else {
-                    let remainder = count % length;
-                    (remainder as f64 / length as f64) as f32
-                }
-            })
-            .into_boxed_inner(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Copy, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct RatioNode;
 
-impl NodeInput for RatioNode {
+impl crate::NodeInput for RatioNode {
     fn inputs(&self) -> PossibleInputs<'static> {
+        use crate::FromAnyProto;
         use once_cell::sync::Lazy;
-        static GROUPS: Lazy<Vec<crate::InputGroup>> = Lazy::new(|| {
-            use crate::InputSupplemental;
-            let float = F32F32::types(&["numerator", "denominator"]);
-            let unsigned = U32U32::types(&["numerator", "denominator"]);
-            let mut acc = vec![];
-            acc.extend(float);
-            acc.extend(unsigned);
-            acc
-        });
-        PossibleInputs::new(&*GROUPS)
+        static CACHE: Lazy<PossibleInputs> =
+            Lazy::new(|| ArithmeticNodeInput::possible_inputs(&["numerator", "denominator"]));
+        PossibleInputs::new(&*CACHE.groups)
     }
 }
 
-impl NodeOutput for RatioNode {
+impl crate::NodeOutput for RatioNode {
     fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
-        if let Ok(output) = F32F32::from_any(inputs) {
-            Ok(RatioGroup::F32(output).op())
-        } else if let Ok(output) = U32U32::from_any(inputs) {
-            Ok(RatioGroup::U32(output).op())
-        } else {
-            Err(())
-        }
+        crate::FromAnyProto::from_any(InputStack::new(inputs, ..)).map(ArithmeticNodeInput::ratio)
     }
 }
 
 #[typetag::serde]
-impl Node for RatioNode {
+impl crate::Node for RatioNode {
     fn name(&self) -> &'static str {
         "ratio"
     }
