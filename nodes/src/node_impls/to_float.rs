@@ -1,6 +1,7 @@
-use crate::{FromAny, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
+use crate::{FromAnyProto, InputComponent, InputStack, OneOrMany, PossibleInputs};
 use std::any::Any;
 
+#[derive(FromAnyProto, InputComponent)]
 enum Input {
     U32(OneOrMany<u32>),
     F32(OneOrMany<f32>),
@@ -17,78 +18,25 @@ impl Input {
     }
 }
 
-impl FromAny for Input {
-    fn from_any(inputs: &mut Vec<Box<dyn Any>>) -> Result<Self, ()> {
-        if let Some(input) = inputs.get(0) {
-            if OneOrMany::<f32>::is(&**input) {
-                let inner = OneOrMany::<f32>::downcast(inputs.remove(0)).unwrap();
-                Ok(Self::F32(inner))
-            } else if OneOrMany::<u32>::is(&**input) {
-                let inner = OneOrMany::<u32>::downcast(inputs.remove(0)).unwrap();
-                Ok(Self::U32(inner))
-            } else {
-                Err(())
-            }
-        } else {
-            Err(())
-        }
-    }
-}
-
-impl Input {
-    fn inputs() -> PossibleInputs<'static> {
-        use crate::InputGroup;
-        use once_cell::sync::Lazy;
-        static GROUPS: Lazy<Vec<InputGroup>> = Lazy::new(|| {
-            let float = OneOrMany::<f32>::type_ids();
-            let unsigned = OneOrMany::<u32>::type_ids();
-            std::array::IntoIter::new(float)
-                .map(|type_id| {
-                    use crate::InputInfo;
-                    InputGroup {
-                        info: vec![InputInfo {
-                            name: "number".into(),
-                            ty_name: "f32",
-                            type_id,
-                        }]
-                        .into(),
-                    }
-                })
-                .chain(std::array::IntoIter::new(unsigned).map(|type_id| {
-                    use crate::InputInfo;
-                    InputGroup {
-                        info: vec![InputInfo {
-                            name: "number".into(),
-                            ty_name: "u32",
-                            type_id,
-                        }]
-                        .into(),
-                    }
-                }))
-                .collect()
-        });
-
-        PossibleInputs::new(&*GROUPS)
-    }
-}
-
 #[derive(Copy, Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ToFloatNode;
 
-impl NodeInput for ToFloatNode {
+impl crate::NodeInput for ToFloatNode {
     fn inputs(&self) -> PossibleInputs<'static> {
-        Input::inputs()
+        use once_cell::sync::Lazy;
+        static CACHE: Lazy<PossibleInputs> = Lazy::new(|| Input::possible_inputs(&["number"]));
+        PossibleInputs::new(&*CACHE.groups)
     }
 }
 
-impl NodeOutput for ToFloatNode {
+impl crate::NodeOutput for ToFloatNode {
     fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
-        Input::from_any(inputs).map(Input::op)
+        Input::from_any(InputStack::new(inputs, ..)).map(Input::op)
     }
 }
 
 #[typetag::serde]
-impl Node for ToFloatNode {
+impl crate::Node for ToFloatNode {
     fn name(&self) -> &'static str {
         "to float"
     }
