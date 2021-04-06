@@ -2,15 +2,21 @@ use nodes::{FromAnyProto, Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs
 use solstice_2d::RegularPolygon;
 use std::any::Any;
 
-type RegularPolygonInput = (
-    OneOrMany<f32>,
-    OneOrMany<f32>,
-    OneOrMany<u32>,
-    OneOrMany<f32>,
-);
+#[derive(FromAnyProto, nodes::InputComponent)]
+struct RegularPolygonInput {
+    x: Option<OneOrMany<f32>>,
+    y: Option<OneOrMany<f32>>,
+    vertex_count: OneOrMany<u32>,
+    radius: OneOrMany<f32>,
+}
 
-fn op((x, y, vertex_count, radius): RegularPolygonInput) -> Box<dyn Any> {
-    nodes::one_many::op4(x, y, vertex_count, radius, RegularPolygon::new).into_boxed_inner()
+impl RegularPolygonInput {
+    fn op(self) -> Box<dyn Any> {
+        let Self { x, y, vertex_count, radius } = self;
+        let x = x.unwrap_or(OneOrMany::One(nodes::One::new(0.)));
+        let y = y.unwrap_or(OneOrMany::One(nodes::One::new(0.)));
+        nodes::one_many::op4(x, y, vertex_count, radius, RegularPolygon::new).into_boxed_inner()
+    }
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -28,7 +34,7 @@ impl NodeInput for RegularPolygonNode {
 
 impl NodeOutput for RegularPolygonNode {
     fn op(&self, inputs: &mut Vec<Box<dyn Any>>) -> Result<Box<dyn Any>, ()> {
-        FromAnyProto::from_any(nodes::InputStack::new(inputs, ..)).map(op)
+        FromAnyProto::from_any(nodes::InputStack::new(inputs, ..)).map(RegularPolygonInput::op)
     }
 }
 
