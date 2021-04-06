@@ -33,8 +33,10 @@ pub fn derive_from_any(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
 
             let downcasts = types.iter().zip(is_option).map(|(ty, is_option)| {
                 if is_option {
+                    // if optional inputs are ever changed to not require a box then this should
+                    // change from `ok` to unwrap
                     quote::quote! {
-                        inputs.next().map(|ty| <#ty>::downcast(ty).unwrap())
+                        inputs.next().and_then(|ty| <#ty>::downcast(ty).ok()).flatten()
                     }
                 } else {
                     quote::quote! {

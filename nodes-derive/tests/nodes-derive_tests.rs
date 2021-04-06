@@ -23,19 +23,37 @@ struct C {
 struct D {
     required: OneOrMany<u32>,
     optional: Option<OneOrMany<u32>>,
+    optional2: Option<OneOrMany<u32>>,
+}
+
+#[test]
+fn struct_skip_optional_test() {
+    let mut inputs: Vec<Box<dyn Any>> = vec![];
+    inputs.push(Box::new(One::new(2u32)));
+    inputs.push(Box::new(Option::<()>::None));
+    inputs.push(Box::new(One::new(3u32)));
+    let d = D::from_any(InputStack::new(&mut inputs, ..)).unwrap();
+    assert_eq!(
+        d,
+        D {
+            required: OneOrMany::One(One::new(2)),
+            optional: None,
+            optional2: Some(OneOrMany::One(One::new(3)))
+        }
+    );
 }
 
 #[test]
 fn struct_optional_test() {
-    let possible_inputs: PossibleInputs = D::possible_inputs(&["required", "optional"]);
+    let possible_inputs: PossibleInputs =
+        D::possible_inputs(&["required", "optional", "optional2"]);
     let optional_count = possible_inputs.groups.iter().fold(0, |acc, group| {
         acc + group.info.iter().filter(|info| info.optional).count()
     });
     let required_count = possible_inputs.groups.iter().fold(0, |acc, group| {
         acc + group.info.iter().filter(|info| !info.optional).count()
     });
-    assert_eq!(optional_count, required_count);
-    assert_eq!(optional_count, 12);
+    assert_eq!(optional_count, required_count * 2);
 
     let mut inputs: Vec<Box<dyn Any>> = vec![];
     inputs.push(Box::new(One::new(2u32)));
@@ -44,7 +62,8 @@ fn struct_optional_test() {
         d,
         D {
             required: OneOrMany::One(One::new(2)),
-            optional: None
+            optional: None,
+            optional2: None
         }
     );
 
@@ -56,6 +75,7 @@ fn struct_optional_test() {
         D {
             required: OneOrMany::One(One::new(2)),
             optional: Some(OneOrMany::One(One::new(3))),
+            optional2: None
         }
     );
 }

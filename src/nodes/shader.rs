@@ -162,7 +162,7 @@ impl FromAnyProto for ShaderInput {
 }
 
 fn op(shader: ShaderInput) -> Box<dyn Any> {
-    Box::new(shader)
+    Box::new(One::new(shader))
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -323,13 +323,13 @@ vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords) 
         let mut inputs: Vec<Box<dyn Any>> = vec![];
         inputs.push(Box::new(One::new(String::from(WITHOUT_UNIFORM))));
         let shader_data = shader_node.op(&mut inputs).unwrap();
-        assert!(shader_data.downcast::<ShaderInput>().is_ok());
+        assert!(shader_data.downcast::<One<ShaderInput>>().is_ok());
 
         let color_uniform = mint::Vector4::from([0f32, 1., 2., 3.]);
         inputs.push(Box::new(One::new(String::from(WITH_UNIFORM))));
         inputs.push(Box::new(One::new(color_uniform)));
         let shader_data = shader_node.op(&mut inputs).unwrap();
-        let shader_data = shader_data.downcast::<ShaderInput>().unwrap();
+        let shader_data = shader_data.downcast::<One<ShaderInput>>().unwrap();
         assert_eq!(shader_data.source, WITH_UNIFORM);
         assert_eq!(
             shader_data.uniforms["color"],

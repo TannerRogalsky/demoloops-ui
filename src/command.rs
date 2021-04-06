@@ -1,10 +1,9 @@
 mod shader;
 
 pub use shader::Shader;
-use solstice_2d::solstice::Context;
 use solstice_2d::{
-    solstice::image::Image, Color, Draw, Graphics, GraphicsLock, PerlinTextureSettings, Rectangle,
-    RegularPolygon,
+    solstice::{image::Image, Context},
+    Color, Draw, Graphics, GraphicsLock, PerlinTextureSettings, Rectangle, RegularPolygon,
 };
 
 #[derive(Debug, Clone)]
@@ -42,9 +41,10 @@ impl Into<Texture> for Option<PerlinTextureSettings> {
 
 #[derive(Debug, Clone)]
 pub struct DrawCommand {
-    geometry: Geometry,
-    color: Color,
-    texture: Texture,
+    pub geometry: Geometry,
+    pub color: Color,
+    pub texture: Texture,
+    pub shader: Option<Shader>,
 }
 
 impl DrawCommand {
@@ -57,6 +57,21 @@ impl DrawCommand {
             geometry: geometry.into(),
             color,
             texture: texture.into(),
+            shader: None,
+        }
+    }
+
+    pub fn with_shader<G: Into<Geometry>, T: Into<Texture>>(
+        geometry: G,
+        color: Color,
+        texture: T,
+        shader: Shader,
+    ) -> DrawCommand {
+        Self {
+            geometry: geometry.into(),
+            color,
+            texture: texture.into(),
+            shader: Some(shader),
         }
     }
 }
@@ -75,6 +90,7 @@ impl ClearCommand {
 #[derive(Default, Debug)]
 pub struct ResourcesCache {
     textures: std::collections::HashMap<PerlinTextureSettings, Image>,
+    shaders: std::collections::HashMap<String, solstice_2d::Shader>,
 }
 
 impl ResourcesCache {
@@ -86,6 +102,18 @@ impl ResourcesCache {
                         use std::collections::hash_map::Entry::Vacant;
                         if let Vacant(v) = self.textures.entry(settings) {
                             v.insert(solstice_2d::create_perlin_texture(ctx, settings).unwrap());
+                        }
+                    }
+
+                    if let Some(shader) = &draw.shader {
+                        use std::collections::hash_map::Entry::Vacant;
+                        if let Vacant(v) = self.shaders.entry(shader.source.clone()) {
+                            let value = solstice_2d::Shader::with(
+                                (v.key().as_str(), v.key().as_str()),
+                                ctx,
+                            )
+                            .unwrap();
+                            v.insert(value);
                         }
                     }
                 }
@@ -117,29 +145,39 @@ impl Command {
 
     pub fn execute(&self, gfx: &mut GraphicsLock, cache: &ResourcesCache) {
         match self {
-            Command::Draw(command) => match &command.texture {
-                Texture::Default => match command.geometry {
-                    Geometry::Rectangle(geometry) => gfx.draw_with_color(geometry, command.color),
-                    Geometry::RegularPolygon(geometry) => {
-                        gfx.draw_with_color(geometry, command.color)
-                    }
-                },
-                Texture::Noise(settings) => {
-                    let texture = cache
-                        .textures
-                        .get(settings)
-                        .expect("Cache should be warmed prior to execution.")
-                        .clone();
-                    match command.geometry {
+            Command::Draw(command) => {
+                let shader = command
+                    .shader
+                    .as_ref()
+                    .and_then(|v| cache.shaders.get(&v.source).cloned());
+                gfx.set_shader(shader);
+
+                match &command.texture {
+                    Texture::Default => match command.geometry {
                         Geometry::Rectangle(geometry) => {
-                            gfx.image_with_color(geometry, texture, command.color)
+                            gfx.draw_with_color(geometry, command.color)
                         }
                         Geometry::RegularPolygon(geometry) => {
-                            gfx.image_with_color(geometry, texture, command.color)
+                            gfx.draw_with_color(geometry, command.color)
+                        }
+                    },
+                    Texture::Noise(settings) => {
+                        let texture = cache
+                            .textures
+                            .get(settings)
+                            .expect("Cache should be warmed prior to execution.")
+                            .clone();
+                        match command.geometry {
+                            Geometry::Rectangle(geometry) => {
+                                gfx.image_with_color(geometry, texture, command.color)
+                            }
+                            Geometry::RegularPolygon(geometry) => {
+                                gfx.image_with_color(geometry, texture, command.color)
+                            }
                         }
                     }
                 }
-            },
+            }
             Command::Clear(command) => {
                 gfx.clear(command.color);
             }

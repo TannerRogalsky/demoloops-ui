@@ -13,11 +13,12 @@ struct DrawNodeInput {
     geometry: Geometry,
     color: Option<OneOrMany<Color>>,
     texture: Option<OneOrMany<PerlinTextureSettings>>,
+    shader: Option<OneOrMany<command::Shader>>,
 }
 
 impl DrawNodeInput {
     fn op(self) -> Box<dyn std::any::Any> {
-        use nodes::one_many::op3 as op;
+        use nodes::one_many::{op3, op4};
         let color = self
             .color
             .unwrap_or(OneOrMany::One(nodes::One::new(Color::new(1., 1., 1., 1.))));
@@ -25,13 +26,28 @@ impl DrawNodeInput {
             None => OneOrMany::One(nodes::One::new(None)),
             Some(noise) => nodes::one_many::op1(noise, |v| Some(v)),
         };
+
         match self.geometry {
-            Geometry::Rectangle(geometry) => {
-                op(geometry, color, texture, command::DrawCommand::new)
-            }
-            Geometry::RegularPolygon(geometry) => {
-                op(geometry, color, texture, command::DrawCommand::new)
-            }
+            Geometry::Rectangle(geometry) => match self.shader {
+                None => op3(geometry, color, texture, command::DrawCommand::new),
+                Some(shader) => op4(
+                    geometry,
+                    color,
+                    texture,
+                    shader,
+                    command::DrawCommand::with_shader,
+                ),
+            },
+            Geometry::RegularPolygon(geometry) => match self.shader {
+                None => op3(geometry, color, texture, command::DrawCommand::new),
+                Some(shader) => op4(
+                    geometry,
+                    color,
+                    texture,
+                    shader,
+                    command::DrawCommand::with_shader,
+                ),
+            },
         }
         .into_boxed_inner()
     }
@@ -45,7 +61,7 @@ impl NodeInput for DrawNode {
         use once_cell::sync::Lazy;
         static CACHE: Lazy<PossibleInputs> = Lazy::new(|| {
             use nodes::FromAnyProto;
-            DrawNodeInput::possible_inputs(&["geometry", "color", "texture"])
+            DrawNodeInput::possible_inputs(&["geometry", "color", "texture", "shader"])
         });
         PossibleInputs::new(&*CACHE.groups)
     }
@@ -62,4 +78,55 @@ impl Node for DrawNode {
     fn name(&self) -> &'static str {
         "draw"
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::command::{DrawCommand, Shader};
+    use nodes::One;
+    use std::any::Any;
+
+    #[test]
+    fn inputs() {
+        let shader_node = crate::ShaderNode::default();
+        let draw_node = DrawNode::default();
+
+        let geometry = Box::new(One::new(crate::Rectangle::new(0., 0., 100., 100.)));
+
+        let mut inputs: Vec<Box<dyn Any>> = vec![];
+        inputs.push(Box::new(One::new(SHADER_SRC.to_string())));
+        let shader = shader_node.op(&mut inputs).unwrap();
+        assert!((&*shader).is::<One<Shader>>());
+
+        inputs.push(geometry);
+        inputs.push(Box::new(Option::<()>::None));
+        inputs.push(Box::new(Option::<()>::None));
+        inputs.push(shader);
+        let command = draw_node
+            .op(&mut inputs)
+            .unwrap()
+            .downcast::<One<DrawCommand>>()
+            .unwrap();
+
+        assert_eq!(command.inner().shader.unwrap().source.as_str(), SHADER_SRC);
+    }
+
+    const SHADER_SRC: &str = r#"
+#ifdef VERTEX
+vec4 pos(mat4 transform_projection, vec4 vertex_position) {
+    return transform_projection * vertex_position;
+}
+#endif
+
+#ifdef FRAGMENT
+uniform float offset;
+
+vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords) {
+    vec2 p = texture_coords - offset;
+    float r = sqrt(dot(p, p));
+    return mix(color, vec4(0.), r);
+}
+#endif
+"#;
 }

@@ -229,7 +229,7 @@ impl<T: 'static> FromAnyProto for OneOrMany<T> {
     }
 }
 
-impl<T: InputComponent + 'static> InputComponent<T> for Option<T> {
+impl<T: InputComponent + 'static> InputComponent for Option<T> {
     fn is(v: &dyn Any) -> bool {
         v.is::<Self>() || T::is(v)
     }
@@ -244,9 +244,9 @@ impl<T: InputComponent + 'static> InputComponent<T> for Option<T> {
         true
     }
 
-    fn downcast(v: Box<dyn Any>) -> Result<T, Box<dyn Any>> {
+    fn downcast(v: Box<dyn Any>) -> Result<Self, Box<dyn Any>> {
         match T::downcast(v) {
-            Ok(v) => return Ok(v),
+            Ok(v) => return Ok(Some(v)),
             Err(v) => v.downcast().map(|v| *v),
         }
     }
@@ -272,15 +272,15 @@ impl<T: FromAnyProto + 'static> FromAnyProto for Option<T> {
     }
 }
 
-pub trait InputComponent<Out = Self> {
+pub trait InputComponent {
     fn is(v: &dyn std::any::Any) -> bool;
     fn type_ids() -> Vec<std::any::TypeId>;
     fn is_optional() -> bool {
         false
     }
-    fn downcast(v: Box<dyn std::any::Any>) -> Result<Out, Box<dyn std::any::Any>>
+    fn downcast(v: Box<dyn std::any::Any>) -> Result<Self, Box<dyn std::any::Any>>
     where
-        Out: Sized;
+        Self: Sized;
 }
 
 #[derive(Debug, Clone)]
@@ -649,11 +649,12 @@ impl Graph {
             .cloned()
             .collect::<Vec<_>>();
         connections.sort_unstable_by(|a, b| a.input.cmp(&b.input));
-        let mut inputs = connections
-            .into_iter()
-            .map(|connection| {
+        let max = connections.last().map(|c| c.input).unwrap_or(0);
+        let mut inputs = Vec::with_capacity(max);
+        for index in 0..=max {
+            if let Some(connection) = connections.iter().find(|c| c.input == index) {
                 let from = self.nodes.get(connection.from).unwrap();
-                if from.is_terminator() {
+                let input = if from.is_terminator() {
                     let mut inputs = vec![];
                     from.op(&mut inputs).map_err(|_| Error {
                         executing_node: connection.from,
@@ -661,9 +662,13 @@ impl Graph {
                     })
                 } else {
                     self.execute_node(connection.from)
-                }
-            })
-            .collect::<Result<Vec<Box<dyn Any>>, Error>>()?;
+                }?;
+                inputs.push(input);
+            } else {
+                // fill the hole
+                inputs.push(Box::new(Option::<()>::None));
+            }
+        }
         let to = self.nodes.get(node_id).unwrap();
         let result = to.op(&mut inputs);
 
