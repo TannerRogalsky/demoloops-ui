@@ -60,9 +60,13 @@ pub fn derive_from_any(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
 
                         let mut is_optional = required.iter().copied();
                         let mut checker = inputs.deref_iter();
-                        #(if !is_optional.next().unwrap() && !<#types>::is(checker.next().unwrap()) {
-                            eprintln!("Type Mismatch: {}", std::any::type_name::<#types>());
-                            return Err(());
+                        #({
+                            let is_optional = is_optional.next().unwrap();
+                            let is_type = checker.next().map(|v| <#types>::is(v)).unwrap_or(false);
+                            if !is_optional && !is_type {
+                                eprintln!("Type Mismatch in {}: {}", std::any::type_name::<#ident>(), std::any::type_name::<#types>());
+                                return Err(());
+                            }
                         })*
 
                         let mut inputs = inputs.consume();
