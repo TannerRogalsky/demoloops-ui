@@ -1,6 +1,6 @@
 use crate::command;
 use nodes::{Node, NodeInput, NodeOutput, OneOrMany, PossibleInputs};
-use solstice_2d::{Color, PerlinTextureSettings, Rectangle, RegularPolygon};
+use solstice_2d::{Color, PerlinTextureSettings, Rectangle, RegularPolygon, Transform3D};
 
 #[derive(nodes::InputComponent, nodes::FromAnyProto)]
 enum Geometry {
@@ -11,6 +11,7 @@ enum Geometry {
 #[derive(nodes::InputComponent, nodes::FromAnyProto)]
 struct DrawNodeInput {
     geometry: Geometry,
+    transform: Option<OneOrMany<Transform3D>>,
     color: Option<OneOrMany<Color>>,
     texture: Option<OneOrMany<PerlinTextureSettings>>,
     shader: Option<OneOrMany<command::Shader>>,
@@ -18,7 +19,7 @@ struct DrawNodeInput {
 
 impl DrawNodeInput {
     fn op(self) -> Box<dyn std::any::Any> {
-        use nodes::one_many::{op3, op4};
+        use nodes::one_many::{op4, op5};
         let color = self
             .color
             .unwrap_or(OneOrMany::One(nodes::One::new(Color::new(1., 1., 1., 1.))));
@@ -26,12 +27,22 @@ impl DrawNodeInput {
             None => OneOrMany::One(nodes::One::new(None)),
             Some(noise) => nodes::one_many::op1(noise, |v| Some(v)),
         };
+        let transform = self
+            .transform
+            .unwrap_or_else(|| OneOrMany::One(nodes::One::new(Transform3D::default())));
 
         match self.geometry {
             Geometry::Rectangle(geometry) => match self.shader {
-                None => op3(geometry, color, texture, command::DrawCommand::new),
-                Some(shader) => op4(
+                None => op4(
                     geometry,
+                    transform,
+                    color,
+                    texture,
+                    command::DrawCommand::new,
+                ),
+                Some(shader) => op5(
+                    geometry,
+                    transform,
                     color,
                     texture,
                     shader,
@@ -39,9 +50,16 @@ impl DrawNodeInput {
                 ),
             },
             Geometry::RegularPolygon(geometry) => match self.shader {
-                None => op3(geometry, color, texture, command::DrawCommand::new),
-                Some(shader) => op4(
+                None => op4(
                     geometry,
+                    transform,
+                    color,
+                    texture,
+                    command::DrawCommand::new,
+                ),
+                Some(shader) => op5(
+                    geometry,
+                    transform,
                     color,
                     texture,
                     shader,
@@ -61,7 +79,7 @@ impl NodeInput for DrawNode {
         use once_cell::sync::Lazy;
         static CACHE: Lazy<PossibleInputs> = Lazy::new(|| {
             use nodes::FromAnyProto;
-            DrawNodeInput::possible_inputs(&["geometry", "color", "texture", "shader"])
+            DrawNodeInput::possible_inputs(&["geometry", "transform", "color", "texture", "shader"])
         });
         PossibleInputs::new(&*CACHE.groups)
     }

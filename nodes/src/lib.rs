@@ -409,6 +409,41 @@ pub mod one_many {
             )),
         }
     }
+
+    pub fn op5<A, B, C, D, E, O, FUNC>(
+        a: OneOrMany<A>,
+        b: OneOrMany<B>,
+        c: OneOrMany<C>,
+        d: OneOrMany<D>,
+        e: OneOrMany<E>,
+        op: FUNC,
+    ) -> OneOrMany<O>
+    where
+        A: Clone + std::fmt::Debug + 'static,
+        B: Clone + std::fmt::Debug + 'static,
+        C: Clone + std::fmt::Debug + 'static,
+        D: Clone + std::fmt::Debug + 'static,
+        E: Clone + std::fmt::Debug + 'static,
+        O: Clone + std::fmt::Debug + 'static,
+        FUNC: Fn(A, B, C, D, E) -> O + 'static + Clone,
+    {
+        match (a, b, c, d, e) {
+            (
+                OneOrMany::One(a),
+                OneOrMany::One(b),
+                OneOrMany::One(c),
+                OneOrMany::One(d),
+                OneOrMany::One(e),
+            ) => OneOrMany::One(One(op(a.0, b.0, c.0, d.0, e.0))),
+            (a, b, c, d, e) => OneOrMany::Many(Many::from(
+                a.zip(b)
+                    .zip(c)
+                    .zip(d)
+                    .zip(e)
+                    .map(move |((((a, b), c), d), e)| op(a, b, c, d, e)),
+            )),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

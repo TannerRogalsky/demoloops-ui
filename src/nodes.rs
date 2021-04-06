@@ -7,7 +7,7 @@ mod rectangle;
 mod regular_polygon;
 mod screen;
 mod shader;
-mod white_texture;
+mod transform;
 
 pub use clear::ClearNode;
 pub use color::ColorNode;
@@ -18,4 +18,4 @@ pub use rectangle::RectangleNode;
 pub use regular_polygon::RegularPolygonNode;
 pub use screen::ScreenNode;
 pub use shader::ShaderNode;
-pub use white_texture::WhiteTextureNode;
+pub use transform::{RotationNode, ScalingNode, TranslationNode};

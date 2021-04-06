@@ -4,6 +4,7 @@ pub use shader::Shader;
 use solstice_2d::{
     solstice::{image::Image, Context},
     Color, Draw, Graphics, GraphicsLock, PerlinTextureSettings, Rectangle, RegularPolygon,
+    Transform3D,
 };
 
 #[derive(Debug, Clone)]
@@ -42,6 +43,7 @@ impl Into<Texture> for Option<PerlinTextureSettings> {
 #[derive(Debug, Clone)]
 pub struct DrawCommand {
     pub geometry: Geometry,
+    pub transform: Transform3D,
     pub color: Color,
     pub texture: Texture,
     pub shader: Option<Shader>,
@@ -50,11 +52,13 @@ pub struct DrawCommand {
 impl DrawCommand {
     pub fn new<G: Into<Geometry>, T: Into<Texture>>(
         geometry: G,
+        transform: Transform3D,
         color: Color,
         texture: T,
     ) -> DrawCommand {
         Self {
             geometry: geometry.into(),
+            transform,
             color,
             texture: texture.into(),
             shader: None,
@@ -63,12 +67,14 @@ impl DrawCommand {
 
     pub fn with_shader<G: Into<Geometry>, T: Into<Texture>>(
         geometry: G,
+        transform: Transform3D,
         color: Color,
         texture: T,
         shader: Shader,
     ) -> DrawCommand {
         Self {
             geometry: geometry.into(),
+            transform,
             color,
             texture: texture.into(),
             shader: Some(shader),
@@ -154,12 +160,16 @@ impl Command {
 
                 match &command.texture {
                     Texture::Default => match command.geometry {
-                        Geometry::Rectangle(geometry) => {
-                            gfx.draw_with_color(geometry, command.color)
-                        }
-                        Geometry::RegularPolygon(geometry) => {
-                            gfx.draw_with_color(geometry, command.color)
-                        }
+                        Geometry::Rectangle(geometry) => gfx.draw_with_color_and_transform(
+                            geometry,
+                            command.color,
+                            command.transform,
+                        ),
+                        Geometry::RegularPolygon(geometry) => gfx.draw_with_color_and_transform(
+                            geometry,
+                            command.color,
+                            command.transform,
+                        ),
                     },
                     Texture::Noise(settings) => {
                         let texture = cache
@@ -168,12 +178,19 @@ impl Command {
                             .expect("Cache should be warmed prior to execution.")
                             .clone();
                         match command.geometry {
-                            Geometry::Rectangle(geometry) => {
-                                gfx.image_with_color(geometry, texture, command.color)
-                            }
-                            Geometry::RegularPolygon(geometry) => {
-                                gfx.image_with_color(geometry, texture, command.color)
-                            }
+                            Geometry::Rectangle(geometry) => gfx.image_with_color_and_transform(
+                                geometry,
+                                texture,
+                                command.color,
+                                command.transform,
+                            ),
+                            Geometry::RegularPolygon(geometry) => gfx
+                                .image_with_color_and_transform(
+                                    geometry,
+                                    texture,
+                                    command.color,
+                                    command.transform,
+                                ),
                         }
                     }
                 }
