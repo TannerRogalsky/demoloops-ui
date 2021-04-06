@@ -26,6 +26,30 @@ struct D {
     optional2: Option<OneOrMany<u32>>,
 }
 
+#[derive(InputComponent, FromAnyProto, Debug, PartialEq, Clone)]
+struct E {
+    optional: Option<OneOrMany<u32>>,
+    optional2: Option<OneOrMany<u32>>,
+    required: OneOrMany<u32>,
+}
+
+#[test]
+fn struct_leading_optional_test() {
+    let mut inputs: Vec<Box<dyn Any>> = vec![];
+    inputs.push(Box::new(Option::<()>::None));
+    inputs.push(Box::new(Option::<()>::None));
+    inputs.push(Box::new(One::new(3u32)));
+    let e = E::from_any(InputStack::new(&mut inputs, ..)).unwrap();
+    assert_eq!(
+        e,
+        E {
+            optional: None,
+            optional2: None,
+            required: OneOrMany::One(One::new(3)),
+        }
+    );
+}
+
 #[test]
 fn struct_skip_optional_test() {
     let mut inputs: Vec<Box<dyn Any>> = vec![];
