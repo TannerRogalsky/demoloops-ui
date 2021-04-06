@@ -2,9 +2,14 @@ use nodes::{FromAnyProto, InputStack, Node, NodeInput, NodeOutput, OneOrMany, Po
 use solstice_2d::Color;
 use std::any::Any;
 
-type HSLInput = (OneOrMany<f32>, OneOrMany<f32>, OneOrMany<f32>);
+#[derive(FromAnyProto, nodes::InputComponent)]
+struct HSLInput {
+    hue: OneOrMany<f32>,
+    saturation: Option<OneOrMany<f32>>,
+    light: Option<OneOrMany<f32>>,
+}
 
-fn op((h, s, l): HSLInput) -> Box<dyn Any> {
+fn op(input: HSLInput) -> Box<dyn Any> {
     use ::nodes::one_many::op3;
     fn hue_to_rgb(p: f32, q: f32, t: f32) -> f32 {
         // Normalize
@@ -52,7 +57,15 @@ fn op((h, s, l): HSLInput) -> Box<dyn Any> {
         )
     }
 
-    op3(h, s, l, hsl).into_boxed_inner()
+    let HSLInput {
+        hue,
+        saturation,
+        light,
+    } = input;
+    let saturation = saturation.unwrap_or(OneOrMany::One(nodes::One::new(1.0)));
+    let light = light.unwrap_or(OneOrMany::One(nodes::One::new(0.5)));
+
+    op3(hue, saturation, light, hsl).into_boxed_inner()
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
