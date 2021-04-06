@@ -12,6 +12,7 @@ mod sin_cos;
 mod to_float;
 
 pub use add::AddNode;
+pub use arithmetic::ArithmeticNodeInput;
 pub use constant::ConstantNode;
 pub use division::DivisionNode;
 pub use global::GlobalNode;

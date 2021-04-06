@@ -20,6 +20,6 @@ impl crate::NodeOutput for AddNode {
 #[typetag::serde]
 impl crate::Node for AddNode {
     fn name(&self) -> &'static str {
-        "multiply"
+        "add"
     }
 }

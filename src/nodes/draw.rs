@@ -120,6 +120,7 @@ mod tests {
         inputs.push(geometry);
         inputs.push(Box::new(Option::<()>::None));
         inputs.push(Box::new(Option::<()>::None));
+        inputs.push(Box::new(Option::<()>::None));
         inputs.push(shader);
         let command = draw_node
             .op(&mut inputs)
